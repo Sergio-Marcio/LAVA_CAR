@@ -1,0 +1,2628 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LAVA_CAR Pro - Sistema RDP & Controle de Lavagens</title>
+    <meta name="theme-color" content="#0284c7">
+    <meta name="description" content="App de Gestão de Lava Car: Entrada, Saída, Preços de Lavagem, Serviços Adicionais e RDP.">
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"LAVA_CAR Pro","short_name":"LavaCar","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0284c7","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3202/3202926.png","sizes":"192x192","type":"image/png"}]}'>
+
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/idb@7/build/umd.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            900: '#0c4a6e',
+                        },
+                        accent: {
+                            500: '#10b981',
+                            600: '#059669',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .touch-target {
+            min-height: 48px;
+            min-width: 48px;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        .content-area {
+            padding-bottom: 100px;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .dark .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        #video-preview {
+            width: 100%;
+            max-height: 260px;
+            object-fit: cover;
+            background: #000;
+            border-radius: 0.75rem;
+        }
+
+        .mirror-video {
+            transform: scaleX(-1);
+        }
+
+        .rec-pulse {
+            animation: pulse-red 1.5s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        #damage-canvas {
+            touch-action: none;
+            background-color: #f8fafc;
+            border-radius: 0.75rem;
+            cursor: crosshair;
+        }
+        .dark #damage-canvas {
+            background-color: #1e293b;
+        }
+
+        /* Printable Receipt & Report Styles */
+        @media print {
+            html, body {
+                background-color: #ffffff !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            body * {
+                visibility: hidden !important;
+            }
+            #printable-ticket, #printable-ticket * {
+                visibility: visible !important;
+            }
+            #printable-ticket {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 80mm !important;
+                padding: 10px !important;
+                font-family: 'Courier New', Courier, monospace !important;
+                font-size: 12px !important;
+                line-height: 1.4 !important;
+                color: #000000 !important;
+                background-color: #ffffff !important;
+                white-space: pre-wrap !important;
+                word-break: break-word !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-full flex flex-col transition-colors duration-200">
+
+    <!-- Container para Impressão de Comprovantes e Fechamento de Caixa -->
+    <pre id="printable-ticket" class="hidden"></pre>
+
+    <!-- Top Header -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                    <i data-lucide="car" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold leading-tight text-slate-900 dark:text-white flex items-center gap-2">
+                        LAVA_CAR <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">PRO v2.0</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Entrada, Saída, Preços & RDP</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <!-- Status Pill -->
+                <div id="status-pill" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="status-text">Online</span>
+                </div>
+
+                <!-- Theme Toggle -->
+                <button onclick="toggleTheme()" class="touch-target p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" aria-label="Alternar Tema">
+                    <i data-lucide="sun" id="icon-sun" class="w-5 h-5 hidden"></i>
+                    <i data-lucide="moon" id="icon-moon" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-4xl mx-auto w-full px-4 pt-4 content-area flex-1">
+        
+        <!-- Toast Notification Bar -->
+        <div id="toast" class="hidden mb-4 p-4 rounded-xl border flex items-center justify-between shadow-lg transition-all transform duration-300">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="info" id="toast-icon" class="w-5 h-5"></i>
+                <span id="toast-msg" class="text-sm font-medium"></span>
+            </div>
+            <button onclick="hideToast()" class="text-xs p-1 hover:opacity-75"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+
+        <!-- ==================== VIEW 1: DASHBOARD ==================== -->
+        <section id="view-dashboard" class="space-y-6">
+            <!-- Financial & Operations Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">No Pátio (Entradas)</p>
+                    <p id="stat-pending" class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">0</p>
+                </div>
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Finalizados (Saídas)</p>
+                    <p id="stat-completed" class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">0</p>
+                </div>
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Faturamento Hoje</p>
+                    <p id="stat-revenue" class="text-xl font-bold text-brand-600 dark:text-brand-400 mt-1">R$ 0,00</p>
+                </div>
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Total de Registros</p>
+                    <p id="stat-total" class="text-2xl font-bold text-slate-900 dark:text-white mt-1">0</p>
+                </div>
+            </div>
+
+            <!-- Action Banner -->
+            <div class="bg-gradient-to-r from-brand-600 to-brand-700 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold">Registrar Nova Entrada de Veículo</h2>
+                    <p class="text-sm text-brand-100 mt-1">Selecione o tipo de lavagem, outros serviços, preços e faça a inspeção RDP.</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button onclick="switchTab('new')" class="touch-target flex-1 md:flex-initial px-6 py-3 bg-white text-brand-700 font-bold rounded-xl shadow hover:bg-brand-50 transition flex items-center justify-center gap-2">
+                        <i data-lucide="plus-circle" class="w-5 h-5"></i> Dar Entrada (Nova RDP)
+                    </button>
+                    <button onclick="loadSeedData()" title="Carregar Exemplo de Serviços e Clientes" class="touch-target px-3 py-3 bg-brand-800/60 hover:bg-brand-800 text-white rounded-xl transition flex items-center justify-center">
+                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search & Filter Controls -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="w-5 h-5 absolute left-3.5 top-3.5 text-slate-400"></i>
+                    <input type="text" id="search-input" onkeyup="filterInspections()" placeholder="Buscar por placa, cliente ou lavagem..." class="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm">
+                </div>
+                <select id="filter-status" onchange="filterInspections()" class="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium">
+                    <option value="ALL">Todos os Veículos</option>
+                    <option value="EM_ANDAMENTO" selected>No Pátio (Em Andamento)</option>
+                    <option value="CONCLUIDO">Entregues (Saídas Concluídas)</option>
+                </select>
+            </div>
+
+            <!-- Inspection & Service List -->
+            <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <i data-lucide="list-ordering" class="w-5 h-5 text-brand-500"></i> Fluxo de Pátio (Entradas & Saídas)
+                </h3>
+                <div id="inspection-list" class="space-y-3">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 2: NOVA ENTRADA / RDP (WIZARD 5 PASSO) ==================== -->
+        <section id="view-new" class="hidden space-y-6">
+            <!-- Progress Stepper Header -->
+            <div class="flex items-center justify-between px-2 mb-2">
+                <div class="flex items-center gap-2">
+                    <span id="step-badge" class="w-8 h-8 rounded-full bg-brand-600 text-white font-bold text-sm flex items-center justify-center">1</span>
+                    <span id="step-title" class="font-bold text-slate-900 dark:text-white text-base">Identificação do Veículo</span>
+                </div>
+                <span class="text-xs text-slate-400 font-medium">Passo <span id="step-num">1</span> de 5</span>
+            </div>
+
+            <div class="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div id="step-bar" class="bg-brand-600 h-full w-1/5 transition-all duration-300"></div>
+            </div>
+
+            <form id="rdp-form" onsubmit="event.preventDefault();" class="space-y-6">
+                
+                <!-- PASSO 1: VEÍCULO E CLIENTE -->
+                <div id="step-1-content" class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="user-check" class="w-4 h-4 text-brand-500"></i> Dados Básicos de Entrada
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Placa do Veículo *</label>
+                            <input type="text" id="inp-placa" required placeholder="Ex: ABC1D23 ou ABC-1234" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-mono font-bold uppercase tracking-wider focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Nome do Cliente *</label>
+                            <input type="text" id="inp-cliente" required placeholder="Ex: Maria Oliveira" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Marca / Modelo</label>
+                            <input type="text" id="inp-modelo" placeholder="Ex: Hyundai HB20" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Telefone / WhatsApp</label>
+                            <input type="tel" id="inp-telefone" placeholder="(11) 99999-9999" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PASSO 2: SELEÇÃO DE TIPOS DE LAVAGEM & OUTROS SERVIÇOS E PREÇOS -->
+                <div id="step-2-content" class="hidden space-y-6">
+                    <!-- Tipos de Lavagem Selector -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <i data-lucide="sparkles" class="w-4 h-4 text-brand-500"></i> Selecione o Tipo de Lavagem *
+                            </h4>
+                            <button type="button" onclick="switchTab('services')" class="text-xs text-brand-600 hover:underline">+ Gerenciar Tabela de Preços</button>
+                        </div>
+                        <div id="wash-types-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Outros Serviços e Preços Adicionais -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="plus-circle" class="w-4 h-4 text-emerald-500"></i> Outros Serviços Adicionais (Opcionais)
+                        </h4>
+                        <div id="extra-services-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Financial Real-Time Calculator Banner -->
+                    <div class="bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-lg">
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Valor Estimado do Atendimento</p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="text-xs bg-brand-900 text-brand-300 px-2 py-0.5 rounded font-mono" id="calc-wash-name">Nenhuma lavagem</span>
+                                <span class="text-xs text-slate-400" id="calc-extras-count">+0 adicionais</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-slate-400">Total a Pagar:</p>
+                            <p id="calc-total-display" class="text-2xl font-extrabold text-emerald-400 font-mono">R$ 0,00</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PASSO 3: CHECKLIST & AVARIAS & VOZ -->
+                <div id="step-3-content" class="hidden space-y-6">
+                    <!-- Quick Checklist -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="check-square" class="w-4 h-4 text-brand-500"></i> Checklist de Entrada RDP
+                        </h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
+                                <span class="text-sm font-medium">Chave no contato</span>
+                                <input type="checkbox" id="chk-chave" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
+                            </label>
+                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
+                                <span class="text-sm font-medium">Pertences no porta-malas</span>
+                                <input type="checkbox" id="chk-portamalas" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
+                            </label>
+                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
+                                <span class="text-sm font-medium">Documentos no painel</span>
+                                <input type="checkbox" id="chk-documentos" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
+                            </label>
+                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
+                                <span class="text-sm font-medium">Estepe / Macaco OK</span>
+                                <input type="checkbox" id="chk-estepe" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Damage Canvas Marker -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-brand-500"></i> Mapeamento de Danos Pré-existentes
+                            </h4>
+                            <button type="button" onclick="clearDamageCanvas()" class="text-xs text-rose-500 hover:underline">Limpar Pontos</button>
+                        </div>
+                        <div class="relative w-full flex justify-center">
+                            <canvas id="damage-canvas" width="600" height="260" class="w-full max-w-lg border border-slate-300 dark:border-slate-700"></canvas>
+                        </div>
+                        <p id="damage-count" class="text-xs text-slate-400 text-right">0 avarias marcadas</p>
+                    </div>
+
+                    <!-- Voice Observations -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <i data-lucide="mic" class="w-4 h-4 text-brand-500"></i> Observações / Ditado por Voz
+                            </h4>
+                            <button type="button" id="btn-audio-rec" onclick="toggleAudioDictation()" class="px-3 py-1.5 bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-medium rounded-lg text-xs flex items-center gap-1.5 hover:bg-brand-200 transition">
+                                <i data-lucide="mic" class="w-4 h-4"></i> <span id="audio-lbl">Gravar Voz</span>
+                            </button>
+                        </div>
+                        <textarea id="inp-obs" rows="3" placeholder="Observações específicas, arranhões internos ou pedidos do cliente..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
+                        <p id="voice-interim" class="text-xs text-brand-600 dark:text-brand-400 italic min-h-[1rem]"></p>
+                    </div>
+                </div>
+
+                <!-- PASSO 4: MÍDIAS (FOTOS E VÍDEOS) -->
+                <div id="step-4-content" class="hidden space-y-6">
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="camera" class="w-4 h-4 text-brand-500"></i> Captura de Fotos e Vídeo de Entrada
+                        </h4>
+
+                        <div class="relative bg-slate-950 rounded-xl overflow-hidden shadow-inner">
+                            <video id="video-preview" autoplay playsinline class="hidden"></video>
+                            <canvas id="photo-canvas" class="hidden"></canvas>
+                            
+                            <div id="rec-timer-overlay" class="hidden absolute top-3 left-3 bg-rose-600/90 text-white px-3 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-2 backdrop-blur">
+                                <span class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                                <span id="rec-time-display">00:00</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button type="button" onclick="startCamera('environment')" class="touch-target p-3 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl text-xs flex flex-col items-center justify-center gap-1 transition">
+                                <i data-lucide="camera" class="w-5 h-5"></i> Câmera Traseira
+                            </button>
+                            <button type="button" onclick="startCamera('user')" class="touch-target p-3 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl text-xs flex flex-col items-center justify-center gap-1 transition">
+                                <i data-lucide="user" class="w-5 h-5"></i> Câmera Frontal
+                            </button>
+                            <button type="button" onclick="takeSnapshot()" id="btn-snapshot" disabled class="touch-target p-3 bg-brand-600 disabled:opacity-50 hover:bg-brand-500 text-white font-bold rounded-xl text-xs flex flex-col items-center justify-center gap-1 transition">
+                                <i data-lucide="aperture" class="w-5 h-5"></i> Tirar Foto
+                            </button>
+                            <button type="button" id="btn-video-rec" onclick="toggleVideoRecording()" class="touch-target p-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex flex-col items-center justify-center gap-1 transition">
+                                <i data-lucide="video" class="w-5 h-5"></i> <span id="video-rec-lbl">Gravar Vídeo</span>
+                            </button>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Ou faça upload de arquivos:</span>
+                            <label class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-lg text-xs cursor-pointer hover:bg-slate-200 transition">
+                                <i data-lucide="upload" class="w-3.5 h-3.5 inline mr-1"></i> Carregar Mídia
+                                <input type="file" accept="image/*,video/*" multiple onchange="handleFileUpload(event)" class="hidden">
+                            </label>
+                        </div>
+
+                        <div>
+                            <h5 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Mídias Vinculadas (<span id="media-count">0</span>)</h5>
+                            <div id="media-gallery" class="grid grid-cols-3 sm:grid-cols-4 gap-2 min-h-[80px] p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <p id="no-media-msg" class="col-span-full text-center text-xs text-slate-400 py-4">Nenhuma mídia anexada.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PASSO 5: REVISÃO & CONFIRMAÇÃO DE ENTRADA -->
+                <div id="step-5-content" class="hidden space-y-6">
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="file-check" class="w-4 h-4 text-emerald-500"></i> Resumo de Entrada & Ticket RDP
+                        </h4>
+
+                        <div class="space-y-3 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-sm">
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500">Placa:</span>
+                                <span id="rev-placa" class="font-mono font-bold text-slate-900 dark:text-white"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500">Cliente:</span>
+                                <span id="rev-cliente" class="font-medium text-slate-900 dark:text-white"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500">Tipo de Lavagem:</span>
+                                <span id="rev-lavagem" class="font-bold text-brand-600"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500">Outros Serviços:</span>
+                                <span id="rev-extras" class="text-slate-700 dark:text-slate-300"></span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                                <span class="text-slate-500">Valor Total Estimado:</span>
+                                <span id="rev-total" class="font-extrabold text-emerald-600 text-lg font-mono"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Hash de Integridade (Crypto):</span>
+                                <span id="rev-hash" class="font-mono text-xs text-slate-500 dark:text-slate-400 break-all"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wizard Navigation Bar -->
+                <div class="flex items-center justify-between gap-3 pt-2">
+                    <button type="button" id="btn-prev" onclick="prevStep()" class="touch-target px-5 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-sm hover:bg-slate-300 transition hidden">
+                        <i data-lucide="arrow-left" class="w-4 h-4 inline mr-1"></i> Voltar
+                    </button>
+                    <div class="flex-1"></div>
+                    <button type="button" id="btn-next" onclick="nextStep()" class="touch-target px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-brand-500/30 transition flex items-center gap-2">
+                        Próximo <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" id="btn-save" onclick="saveInspectionRDP()" class="touch-target px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/30 transition hidden flex items-center gap-2">
+                        <i data-lucide="check-circle" class="w-5 h-5"></i> Confirmar Entrada (RDP)
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ==================== VIEW 3: CADASTRO DE SERVIÇOS & PREÇOS ==================== -->
+        <section id="view-services" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="tag" class="w-5 h-5 text-brand-500"></i> Seleção de Serviços & Preços
+                    </h3>
+                    <p class="text-xs text-slate-500">Gerenciamento completo de tabela de preços, tipos de lavagem, adicionais e calculadora em tempo real.</p>
+                </div>
+                <button onclick="openModalAddService()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow transition">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Novo Serviço
+                </button>
+            </div>
+
+            <!-- Financial Real-Time Calculator Banner & Simulator -->
+            <div class="bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-lg">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium uppercase tracking-wider">Calculadora Financeira / Simulador em Tempo Real</p>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-xs bg-brand-900 text-brand-300 px-2.5 py-1 rounded font-mono font-bold" id="sim-wash-name">Nenhuma lavagem</span>
+                        <span class="text-xs text-slate-400" id="sim-extras-count">+0 adicionais</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-slate-400">Total a Pagar (R$):</p>
+                    <p id="sim-total-display" class="text-2xl font-extrabold text-emerald-400 font-mono">R$ 0,00</p>
+                </div>
+            </div>
+
+            <!-- Lavagens List -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider text-brand-600 flex items-center gap-2">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-brand-500"></i> Tipos de Lavagem & Preços
+                    </h4>
+                    <span class="text-xs text-slate-400 font-medium">Clique no card para simular o valor</span>
+                </div>
+                <div id="services-wash-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- Outros Serviços List -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider text-emerald-600 flex items-center gap-2">
+                        <i data-lucide="plus-circle" class="w-4 h-4 text-emerald-500"></i> Outros Serviços Adicionais (Preços)
+                    </h4>
+                    <span class="text-xs text-slate-400 font-medium">Clique para selecionar / desselecionar</span>
+                </div>
+                <div id="services-extra-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 4: CLIENTES & VEÍCULOS ==================== -->
+        <section id="view-clients" class="hidden space-y-6">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="users" class="w-5 h-5 text-brand-500"></i> Clientes e Veículos Cadastrados
+            </h3>
+            <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Rendered dynamically -->
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 5: RELATÓRIOS & FECHAMENTO DE CAIXA ==================== -->
+        <section id="view-reports" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-brand-500"></i> Relatórios & Fechamento de Caixa
+                    </h3>
+                    <p class="text-xs text-slate-500">Fechamento diário, mensal, estornos de serviços e estoque de produtos.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="printBoxClosureReport()" class="px-4 py-2 bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow hover:bg-slate-700 transition">
+                        <i data-lucide="printer" class="w-4 h-4"></i> Imprimir Caixa
+                    </button>
+                </div>
+            </div>
+
+            <!-- Report Sub-Tab Navigation -->
+            <div class="flex border-b border-slate-200 dark:border-slate-800 space-x-4">
+                <button onclick="switchReportTab('daily')" id="rtab-daily" class="pb-2 font-bold text-sm text-brand-600 border-b-2 border-brand-600 transition">
+                    Fechamento Diário
+                </button>
+                <button onclick="switchReportTab('monthly')" id="rtab-monthly" class="pb-2 font-bold text-sm text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition">
+                    Fechamento Mensal
+                </button>
+                <button onclick="switchReportTab('products')" id="rtab-products" class="pb-2 font-bold text-sm text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition flex items-center gap-1.5">
+                    Nível de Produtos <span id="badge-low-products" class="hidden px-1.5 py-0.5 text-[10px] rounded-full bg-rose-600 text-white font-bold animate-pulse">0</span>
+                </button>
+            </div>
+
+            <!-- SUB-TAB 1: FECHAMENTO DIÁRIO -->
+            <div id="rep-sec-daily" class="space-y-4">
+                <div class="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs font-bold uppercase text-slate-400">Data de Referência:</span>
+                    <input type="date" id="rep-daily-date" onchange="loadDailyReport()" class="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold">
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Faturamento Bruto</p>
+                        <p id="daily-gross" class="text-xl font-bold text-emerald-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Estornos / Cancels</p>
+                        <p id="daily-refunds" class="text-xl font-bold text-rose-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Saldo Líquido Caixa</p>
+                        <p id="daily-net" class="text-xl font-extrabold text-brand-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Atendimentos</p>
+                        <p id="daily-count" class="text-xl font-bold text-slate-900 dark:text-white mt-1">0</p>
+                    </div>
+                </div>
+
+                <!-- Detalhamento Formas de Pagamento -->
+                <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Detalhamento por Forma de Pagamento</h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                            <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"><i data-lucide="qr-code" class="w-4 h-4"></i> PIX</span>
+                            <p id="pay-pix" class="text-lg font-mono font-extrabold text-emerald-600 mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800">
+                            <span class="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1"><i data-lucide="credit-card" class="w-4 h-4"></i> C. Crédito</span>
+                            <p id="pay-credit" class="text-lg font-mono font-extrabold text-blue-600 mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800">
+                            <span class="text-xs font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-1"><i data-lucide="credit-card" class="w-4 h-4"></i> C. Débito</span>
+                            <p id="pay-debit" class="text-lg font-mono font-extrabold text-indigo-600 mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800">
+                            <span class="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1"><i data-lucide="banknote" class="w-4 h-4"></i> Dinheiro</span>
+                            <p id="pay-cash" class="text-lg font-mono font-extrabold text-amber-600 mt-1">R$ 0,00</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Histórico Diário de Caixa -->
+                <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Histórico de Transações do Dia</h4>
+                    <div id="daily-tx-list" class="space-y-2">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-TAB 2: FECHAMENTO MENSAL -->
+            <div id="rep-sec-monthly" class="hidden space-y-4">
+                <div class="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <span class="text-xs font-bold uppercase text-slate-400">Mês de Referência:</span>
+                    <input type="month" id="rep-monthly-month" onchange="loadMonthlyReport()" class="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold">
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Total Bruto Mensal</p>
+                        <p id="monthly-gross" class="text-xl font-bold text-emerald-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Total Estornado</p>
+                        <p id="monthly-refunds" class="text-xl font-bold text-rose-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Saldo Faturado Mês</p>
+                        <p id="monthly-net" class="text-xl font-extrabold text-brand-600 mt-1">R$ 0,00</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <p class="text-xs text-slate-500 font-medium">Tíquete Médio / Lavagem</p>
+                        <p id="monthly-avg" class="text-xl font-bold text-slate-900 dark:text-white mt-1">R$ 0,00</p>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Resumo Mensal de Serviços</h4>
+                    <div id="monthly-summary-list" class="space-y-2">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-TAB 3: NÍVEL DE PRODUTOS -->
+            <div id="rep-sec-products" class="hidden space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Relatório de Nível de Produtos & Estoque</h4>
+                        <p class="text-xs text-slate-500">Acompanhe os níveis de produtos (Cheio, Meio, Baixo) com indicativo em cores.</p>
+                    </div>
+                    <button onclick="openModalProduct()" class="px-4 py-2 bg-brand-600 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow hover:bg-brand-500 transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Novo Produto
+                    </button>
+                </div>
+
+                <div id="products-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Dynamic product level cards rendered here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== VIEW 6: CONFIGURAÇÕES & DADOS ==================== -->
+        <section id="view-settings" class="hidden space-y-6">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="settings" class="w-5 h-5 text-brand-500"></i> Gestão do Banco de Dados & Opções
+            </h3>
+
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Ações de Banco de Dados</h4>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="triggerManualSync()" class="touch-target px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-brand-500 transition">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sincronizar com Nuvem
+                    </button>
+                    <button onclick="exportBackupJSON()" class="touch-target px-4 py-2.5 bg-slate-800 text-white font-medium rounded-xl text-xs flex items-center gap-2 hover:bg-slate-700 transition">
+                        <i data-lucide="download" class="w-4 h-4"></i> Exportar Backup JSON
+                    </button>
+                    <button onclick="clearAllData()" class="touch-target px-4 py-2.5 bg-rose-600/10 text-rose-600 font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-rose-600/20 transition">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Limpar Dados Locais
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL: REGISTRAR SAÍDA / CHECKOUT E PAGAMENTO -->
+    <div id="modal-checkout" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="log-out" class="w-5 h-5 text-emerald-500"></i> Registrar Saída (Checkout)
+                </h3>
+                <button onclick="closeModalCheckout()" class="touch-target p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 bg-slate-50 dark:bg-slate-800 p-4 rounded-xl text-sm">
+                <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <span class="text-slate-500">Veículo / Placa:</span>
+                    <strong id="co-placa" class="font-mono text-brand-600"></strong>
+                </div>
+                <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <span class="text-slate-500">Cliente:</span>
+                    <strong id="co-cliente"></strong>
+                </div>
+                <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <span class="text-slate-500">Hora de Entrada:</span>
+                    <span id="co-entrada" class="text-xs font-mono"></span>
+                </div>
+                <div class="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-1">
+                    <span class="text-slate-500">Lavagem & Serviços:</span>
+                    <span id="co-servicos" class="text-xs text-right font-medium"></span>
+                </div>
+                <div class="flex justify-between items-center pt-1">
+                    <span class="font-bold text-slate-700 dark:text-slate-200">Valor Total a Cobrar:</span>
+                    <span id="co-total" class="text-xl font-extrabold text-emerald-600 font-mono"></span>
+                </div>
+            </div>
+
+            <!-- Formas de Pagamento -->
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">Forma de Pagamento *</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border cursor-pointer hover:border-brand-500">
+                        <input type="radio" name="pay-method" value="PIX" checked class="text-brand-600">
+                        <span class="text-xs font-bold flex items-center gap-1"><i data-lucide="qr-code" class="w-4 h-4 text-emerald-500"></i> PIX</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border cursor-pointer hover:border-brand-500">
+                        <input type="radio" name="pay-method" value="CARTAO_CREDITO" class="text-brand-600">
+                        <span class="text-xs font-bold flex items-center gap-1"><i data-lucide="credit-card" class="w-4 h-4 text-brand-500"></i> C. Crédito</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border cursor-pointer hover:border-brand-500">
+                        <input type="radio" name="pay-method" value="CARTAO_DEBITO" class="text-brand-600">
+                        <span class="text-xs font-bold flex items-center gap-1"><i data-lucide="credit-card" class="w-4 h-4 text-blue-500"></i> C. Débito</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border cursor-pointer hover:border-brand-500">
+                        <input type="radio" name="pay-method" value="DINHEIRO" class="text-brand-600">
+                        <span class="text-xs font-bold flex items-center gap-1"><i data-lucide="banknote" class="w-4 h-4 text-amber-500"></i> Dinheiro</span>
+                    </label>
+                </div>
+            </div>
+
+            <input type="hidden" id="co-processo-id">
+
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button onclick="closeModalCheckout()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                <button onclick="confirmCheckout()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow">
+                    Confirmar Saída & Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DETALHES & IMPRESSÃO TICKET -->
+    <div id="modal-details" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-brand-500"></i> Detalhes da Ordem / Ticket RDP
+                </h3>
+                <button onclick="closeModalDetails()" class="touch-target p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div id="modal-details-content" class="space-y-4">
+                <!-- Content injected dynamically -->
+            </div>
+
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between">
+                <button onclick="window.print()" class="px-4 py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Imprimir Recibo
+                </button>
+                <button onclick="closeModalDetails()" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CADASTRAR NOVO SERVIÇO -->
+    <div id="modal-add-service" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="tag" class="w-5 h-5 text-brand-500"></i> Cadastrar Serviço / Preço
+            </h3>
+            
+            <form onsubmit="event.preventDefault(); saveNewService();" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome do Serviço *</label>
+                    <input type="text" id="new-serv-nome" required placeholder="Ex: Higienização de Estofados" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Categoria *</label>
+                    <select id="new-serv-cat" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                        <option value="LAVAGEM">Tipo de Lavagem</option>
+                        <option value="OUTRO">Outros Serviços Adicionais</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Preço (R$) *</label>
+                    <input type="number" step="0.01" id="new-serv-preco" required placeholder="80.00" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Descrição</label>
+                    <input type="text" id="new-serv-desc" placeholder="Detalhes do serviço..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalAddService()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-600 text-white font-bold text-xs rounded-xl">Salvar Serviço</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: EDITAR SERVIÇO & PREÇO -->
+    <div id="modal-edit-service" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="edit-3" class="w-5 h-5 text-brand-500"></i> Editar Serviço & Preço
+            </h3>
+            
+            <form onsubmit="event.preventDefault(); saveEditService();" class="space-y-3">
+                <input type="hidden" id="edit-serv-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome do Serviço *</label>
+                    <input type="text" id="edit-serv-nome" required class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Categoria *</label>
+                    <select id="edit-serv-cat" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                        <option value="LAVAGEM">Tipo de Lavagem</option>
+                        <option value="OUTRO">Outros Serviços Adicionais</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Novo Preço (R$) *</label>
+                    <input type="number" step="0.01" id="edit-serv-preco" required placeholder="80.00" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono font-bold text-brand-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Descrição</label>
+                    <input type="text" id="edit-serv-desc" placeholder="Detalhes do serviço..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalEditService()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hidden Printable Ticket HTML Element -->
+    <div id="printable-ticket" class="hidden">
+        <!-- Rendered dynamically for printing -->
+    </div>
+
+    <!-- MODAL: ESTORNO DE VALOR / CANCELAMENTO -->
+    <div id="modal-refund" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5 text-rose-500"></i> Estornar / Cancelar Serviço
+                </h3>
+                <button onclick="closeModalRefund()" class="touch-target p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-2 bg-rose-50 dark:bg-rose-950/40 p-4 rounded-xl text-sm border border-rose-200 dark:border-rose-900">
+                <div class="flex justify-between">
+                    <span class="text-rose-700 dark:text-rose-300">Veículo / Placa:</span>
+                    <strong id="ref-placa" class="font-mono text-rose-700 dark:text-rose-300 font-bold"></strong>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-rose-700 dark:text-rose-300">Cliente:</span>
+                    <strong id="ref-cliente"></strong>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-rose-700 dark:text-rose-300">Valor Registrado:</span>
+                    <strong id="ref-valor-orig" class="font-mono text-rose-700"></strong>
+                </div>
+            </div>
+
+            <form onsubmit="event.preventDefault(); confirmRefundService();" class="space-y-3">
+                <input type="hidden" id="ref-processo-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Motivo do Estorno / Cancelamento *</label>
+                    <textarea id="ref-motivo" required rows="2" placeholder="Ex: Cliente solicitou desistência, insatisfação, erro de lançamento..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Valor a Estornar (R$) *</label>
+                    <input type="number" step="0.01" id="ref-valor" required class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono font-bold text-rose-600 outline-none">
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalRefund()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow">Confirmar Estorno</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CADASTRAR / EDITAR PRODUTO & NÍVEL -->
+    <div id="modal-product" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <h3 id="prod-modal-title" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="package" class="w-5 h-5 text-brand-500"></i> Cadastrar Produto & Nível
+            </h3>
+            
+            <form onsubmit="event.preventDefault(); saveProduct();" class="space-y-3">
+                <input type="hidden" id="prod-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome do Produto *</label>
+                    <input type="text" id="prod-nome" required placeholder="Ex: Shampoo Neutro 5L" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Valor / Custo (R$) *</label>
+                    <input type="number" step="0.01" id="prod-valor" required placeholder="50.00" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nível Atual do Produto *</label>
+                    <select id="prod-nivel" onchange="autoFillProductPercent()" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none font-bold">
+                        <option value="CHEIO">CHEIO (Barra Verde 🟢 ~90-100%)</option>
+                        <option value="MEIO">MEIO (Barra Amarela 🟡 ~40-60%)</option>
+                        <option value="BAIXO">BAIXO / REPOSIÇÃO (Barra Vermelha 🔴 &lt;30%)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Porcentagem Exata (%)</label>
+                    <input type="number" min="0" max="100" id="prod-percent" placeholder="100" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Descrição / Detalhes</label>
+                    <input type="text" id="prod-desc" placeholder="Fornecedor, dosagem..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalProduct()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar Produto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bottom Ergonomic Thumb Navigation Bar -->
+    <nav class="bottom-nav glass-panel border-t border-slate-200 dark:border-slate-800">
+        <div class="max-w-md mx-auto px-4 py-2 flex items-center justify-around">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="touch-target flex flex-col items-center justify-center text-brand-600 dark:text-brand-400 font-bold transition">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Pátio</span>
+            </button>
+            <button onclick="switchTab('new')" id="nav-new" class="touch-target flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 transition">
+                <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Nova RDP</span>
+            </button>
+            <button onclick="switchTab('services')" id="nav-services" class="touch-target flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 transition">
+                <i data-lucide="tag" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Preços</span>
+            </button>
+            <button onclick="switchTab('reports')" id="nav-reports" class="touch-target flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 transition">
+                <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Relatórios</span>
+            </button>
+            <button onclick="switchTab('clients')" id="nav-clients" class="touch-target flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 transition">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Clientes</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="touch-target flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 transition">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Config</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Application Script -->
+    <script>
+        // --- STATE & CONSTANTS ---
+        const DB_NAME = 'LavaCarDB';
+        const DB_VERSION = 3;
+        let db;
+        let currentTab = 'dashboard';
+        let currentReportTab = 'daily';
+        let currentStep = 1;
+
+        // Selection State for New RDP
+        let selectedWashId = null;
+        let selectedExtraIds = new Set();
+
+        // Selection State for Services Simulator
+        let simSelectedWashId = null;
+        let simSelectedExtraIds = new Set();
+
+        // --- TOAST NOTIFICATIONS ---
+        function showToast(msg, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            if (!toast || !toastMsg) return;
+
+            toastMsg.textContent = msg;
+            toast.className = 'mb-4 p-4 rounded-xl border flex items-center justify-between shadow-lg transition-all transform duration-300 ';
+            if (type === 'error') {
+                toast.className += 'bg-rose-50 dark:bg-rose-950 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900';
+            } else if (type === 'success') {
+                toast.className += 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900';
+            } else if (type === 'warning') {
+                toast.className += 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900';
+            } else {
+                toast.className += 'bg-brand-50 dark:bg-brand-950 text-brand-800 dark:text-brand-200 border-brand-200 dark:border-brand-900';
+            }
+            toast.classList.remove('hidden');
+            setTimeout(hideToast, 4000);
+        }
+
+        function hideToast() {
+            const toast = document.getElementById('toast');
+            if (toast) toast.classList.add('hidden');
+        }
+
+        // Hardware State
+        let cameraStream = null;
+        let mediaRecorder = null;
+        let recordedVideoChunks = [];
+        let isVideoRecording = false;
+        let videoTimerInterval = null;
+        let videoSeconds = 0;
+        let speechRecognition = null;
+        let isAudioRecording = false;
+
+        let currentInspectionMedia = [];
+        let damagePoints = [];
+
+        // --- INDEXEDDB INITIALIZATION & SEEDING ---
+        async function initDB() {
+            try {
+                db = await idb.openDB(DB_NAME, DB_VERSION, {
+                    upgrade(db, oldVersion) {
+                        if (!db.objectStoreNames.contains('clientes')) {
+                            db.createObjectStore('clientes', { keyPath: 'id', autoIncrement: true });
+                        }
+                        if (!db.objectStoreNames.contains('veiculos')) {
+                            const vStore = db.createObjectStore('veiculos', { keyPath: 'id', autoIncrement: true });
+                            vStore.createIndex('placa', 'placa', { unique: true });
+                        }
+                        if (!db.objectStoreNames.contains('processos')) {
+                            const pStore = db.createObjectStore('processos', { keyPath: 'id', autoIncrement: true });
+                            pStore.createIndex('status', 'status');
+                            pStore.createIndex('placa', 'placa');
+                        }
+                        if (!db.objectStoreNames.contains('registros_midia')) {
+                            const mStore = db.createObjectStore('registros_midia', { keyPath: 'id', autoIncrement: true });
+                            mStore.createIndex('processo_id', 'processo_id');
+                        }
+                        if (!db.objectStoreNames.contains('servicos')) {
+                            db.createObjectStore('servicos', { keyPath: 'id', autoIncrement: true });
+                        }
+                        if (!db.objectStoreNames.contains('produtos')) {
+                            db.createObjectStore('produtos', { keyPath: 'id', autoIncrement: true });
+                        }
+                    }
+                });
+
+                await seedDefaultServicesIfEmpty();
+                await seedDefaultProductsIfEmpty();
+                loadDashboardData();
+            } catch (err) {
+                console.error('Erro no IndexedDB:', err);
+                showToast('Erro ao iniciar banco offline', 'error');
+            }
+        }
+
+        async function seedDefaultProductsIfEmpty() {
+            const count = await db.count('produtos');
+            if (count === 0) {
+                const tx = db.transaction('produtos', 'readwrite');
+                await tx.store.add({ nome: 'Shampoo Neutro Automotivo 5L', valor: 85.00, nivel: 'CHEIO', percentual: 90, descricao: 'Detergente neutro de alto rendimento' });
+                await tx.store.add({ nome: 'Cera de Carnaúba Premium 500g', valor: 65.00, nivel: 'CHEIO', percentual: 80, descricao: 'Cera de proteção e brilho intenso' });
+                await tx.store.add({ nome: 'Pretinho de Pneus 5L', valor: 45.00, nivel: 'MEIO', percentual: 50, descricao: 'Brilho e proteção duradoura para pneus' });
+                await tx.store.add({ nome: 'Desengraxante de Motor 5L', valor: 75.00, nivel: 'CHEIO', percentual: 100, descricao: 'Desengraxante de caixas de roda e motor' });
+                await tx.store.add({ nome: 'Cheirinho / Essência Automotiva 1L', valor: 35.00, nivel: 'BAIXO', percentual: 20, descricao: 'Aroma interno para veículos' });
+                await tx.store.add({ nome: 'Cristalizador de Para-brisa 500ml', valor: 40.00, nivel: 'MEIO', percentual: 45, descricao: 'Repelente de chuva' });
+                await tx.done;
+            }
+        }
+
+        async function seedDefaultServicesIfEmpty() {
+            const count = await db.count('servicos');
+            if (count === 0) {
+                const tx = db.transaction('servicos', 'readwrite');
+                // Wash Types
+                await tx.store.add({ nome: 'Ducha Rápida', categoria: 'LAVAGEM', preco: 35.00, descricao: 'Lavagem externa rápida com enxágue e secagem' });
+                await tx.store.add({ nome: 'Lavagem Simples', categoria: 'LAVAGEM', preco: 50.00, descricao: 'Lavagem externa com shampoo neutro e aspiração interna' });
+                await tx.store.add({ nome: 'Lavagem Completa', categoria: 'LAVAGEM', preco: 80.00, descricao: 'Lavagem externa detalhada, caixas de roda, aspiração completa e pretinho' });
+                await tx.store.add({ nome: 'Lavagem Executiva / Detalhada', categoria: 'LAVAGEM', preco: 130.00, descricao: 'Lavagem técnica detalhada, cera líquida, limpeza de painel e vidros' });
+
+                // Extra Services
+                await tx.store.add({ nome: 'Cera de Carnaúba / Cristalizadora', categoria: 'OUTRO', preco: 45.00, descricao: 'Aplicação manual de cera protetora de alto brilho' });
+                await tx.store.add({ nome: 'Higienização de Ar-Condicionado (Ozone)', categoria: 'OUTRO', preco: 60.00, descricao: 'Ozonização para eliminação de fungos e maus odores' });
+                await tx.store.add({ nome: 'Lavagem Técnica de Motor', categoria: 'OUTRO', preco: 70.00, descricao: 'Limpeza minuciosa do motor com produtos desengraxantes' });
+                await tx.store.add({ nome: 'Limpeza e Hidratação de Couro', categoria: 'OUTRO', preco: 120.00, descricao: 'Higienização e hidratação profunda dos bancos de couro' });
+                await tx.done;
+            }
+        }
+
+        // --- SERVICE WORKER & ONLINE STATUS ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+        }
+        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('offline', updateConnectionStatus);
+
+        function updateConnectionStatus() {
+            const pill = document.getElementById('status-pill');
+            const txt = document.getElementById('status-text');
+            if (navigator.onLine) {
+                pill.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
+                txt.textContent = 'Online';
+            } else {
+                pill.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800";
+                txt.textContent = 'Offline';
+            }
+        }
+
+        // --- NAVIGATION & TABS ---
+        function switchTab(tab) {
+            currentTab = tab;
+            ['dashboard', 'new', 'services', 'reports', 'clients', 'settings'].forEach(t => {
+                const sec = document.getElementById(`view-${t}`);
+                const btn = document.getElementById(`nav-${t}`);
+                if (t === tab) {
+                    sec.classList.remove('hidden');
+                    if (btn) {
+                        btn.classList.replace('text-slate-400', 'text-brand-600');
+                        btn.classList.add('font-bold');
+                    }
+                } else {
+                    sec.classList.add('hidden');
+                    if (btn) {
+                        btn.classList.replace('text-brand-600', 'text-slate-400');
+                        btn.classList.remove('font-bold');
+                    }
+                }
+            });
+
+            if (tab === 'dashboard') loadDashboardData();
+            if (tab === 'services') loadServicesTab();
+            if (tab === 'reports') {
+                const today = new Date().toISOString().split('T')[0];
+                const thisMonth = new Date().toISOString().substring(0, 7);
+                document.getElementById('rep-daily-date').value = today;
+                document.getElementById('rep-monthly-month').value = thisMonth;
+                switchReportTab(currentReportTab);
+            }
+            if (tab === 'clients') loadClientsData();
+            if (tab === 'new' && currentStep === 1) renderServicesSelectorsInWizard();
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.toggle('dark');
+            document.getElementById('icon-sun').classList.toggle('hidden', !isDark);
+            document.getElementById('icon-moon').classList.toggle('hidden', isDark);
+            localStorage.setItem('lavacar_theme', isDark ? 'dark' : 'light');
+        }
+
+        if (localStorage.getItem('lavacar_theme') === 'dark' || (!('lavacar_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            document.getElementById('icon-sun').classList.remove('hidden');
+            document.getElementById('icon-moon').classList.add('hidden');
+        }
+
+        // --- WIZARD NAVIGATION ---
+        function setStep(step) {
+            currentStep = step;
+            document.getElementById('step-num').textContent = step;
+            document.getElementById('step-badge').textContent = step;
+
+            const titles = [
+                'Identificação do Veículo',
+                'Tipo de Lavagem & Serviços',
+                'Checklist e Mapeamento de Danos',
+                'Captura de Mídias (Fotos e Vídeo)',
+                'Revisão e Confirmação de Entrada'
+            ];
+            document.getElementById('step-title').textContent = titles[step - 1];
+            document.getElementById('step-bar').style.width = `${(step / 5) * 100}%`;
+
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById(`step-${i}-content`).classList.toggle('hidden', i !== step);
+            }
+
+            document.getElementById('btn-prev').classList.toggle('hidden', step === 1);
+            document.getElementById('btn-next').classList.toggle('hidden', step === 5);
+            document.getElementById('btn-save').classList.toggle('hidden', step !== 5);
+
+            if (step === 2) renderServicesSelectorsInWizard();
+            if (step === 3) setTimeout(drawCarDiagram, 100);
+            if (step === 5) updateReviewSummary();
+        }
+
+        function nextStep() {
+            if (currentStep === 1) {
+                const placa = document.getElementById('inp-placa').value.trim();
+                const cliente = document.getElementById('inp-cliente').value.trim();
+                if (!placa || !cliente) return showToast('Digite a Placa e o Cliente', 'error');
+            }
+            if (currentStep === 2) {
+                if (!selectedWashId) return showToast('Selecione um Tipo de Lavagem', 'error');
+            }
+            if (currentStep < 5) setStep(currentStep + 1);
+        }
+
+        function prevStep() {
+            if (currentStep > 1) setStep(currentStep - 1);
+        }
+
+        // --- RENDER WIZARD SERVICES SELECTORS ---
+        async function renderServicesSelectorsInWizard() {
+            const allServices = await db.getAll('servicos');
+            const washGrid = document.getElementById('wash-types-grid');
+            const extraGrid = document.getElementById('extra-services-grid');
+
+            const washTypes = allServices.filter(s => s.categoria === 'LAVAGEM');
+            const extraServices = allServices.filter(s => s.categoria === 'OUTRO');
+
+            // Set default wash if none selected
+            if (!selectedWashId && washTypes.length > 0) {
+                selectedWashId = washTypes[0].id;
+            }
+
+            washGrid.innerHTML = washTypes.map(s => {
+                const isSel = s.id === selectedWashId;
+                return `
+                <div onclick="selectWashType(${s.id})" class="p-4 rounded-xl border-2 cursor-pointer transition flex items-center justify-between ${isSel ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 shadow-sm' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
+                                ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
+                            </span>
+                            <h5 class="font-bold text-slate-900 dark:text-white text-sm">${s.nome}</h5>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">${s.descricao || ''}</p>
+                    </div>
+                    <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-sm">R$ ${s.preco.toFixed(2)}</span>
+                </div>`;
+            }).join('');
+
+            extraGrid.innerHTML = extraServices.map(s => {
+                const isSel = selectedExtraIds.has(s.id);
+                return `
+                <div onclick="toggleExtraService(${s.id})" class="p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${isSel ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded">
+                        <div>
+                            <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
+                            <p class="text-[10px] text-slate-500">${s.descricao || ''}</p>
+                        </div>
+                    </div>
+                    <span class="font-mono font-bold text-emerald-600 text-xs">R$ ${s.preco.toFixed(2)}</span>
+                </div>`;
+            }).join('');
+
+            updateFinancialCalculations(allServices);
+        }
+
+        function selectWashType(id) {
+            selectedWashId = id;
+            renderServicesSelectorsInWizard();
+        }
+
+        function toggleExtraService(id) {
+            if (selectedExtraIds.has(id)) {
+                selectedExtraIds.delete(id);
+            } else {
+                selectedExtraIds.add(id);
+            }
+            renderServicesSelectorsInWizard();
+        }
+
+        async function updateFinancialCalculations(allServices) {
+            if (!allServices) allServices = await db.getAll('servicos');
+            const wash = allServices.find(s => s.id === selectedWashId);
+            let total = wash ? wash.preco : 0;
+
+            let extraCount = 0;
+            selectedExtraIds.forEach(id => {
+                const ext = allServices.find(s => s.id === id);
+                if (ext) {
+                    total += ext.preco;
+                    extraCount++;
+                }
+            });
+
+            document.getElementById('calc-wash-name').textContent = wash ? wash.nome : 'Sem lavagem';
+            document.getElementById('calc-extras-count').textContent = `+${extraCount} adicionais`;
+            document.getElementById('calc-total-display').textContent = `R$ ${total.toFixed(2)}`;
+        }
+
+        // --- DAMAGE CANVAS ---
+        function drawCarDiagram() {
+            const canvas = document.getElementById('damage-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const isDark = document.documentElement.classList.contains('dark');
+            ctx.strokeStyle = isDark ? '#64748b' : '#94a3b8';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.roundRect(140, 40, 320, 180, 40);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(200, 70); ctx.lineTo(200, 190);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(400, 70); ctx.lineTo(400, 190);
+            ctx.stroke();
+
+            ctx.strokeRect(200, 20, 30, 15);
+            ctx.strokeRect(200, 225, 30, 15);
+
+            ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText('FRENTE', 150, 135);
+            ctx.fillText('TRASEIRA', 410, 135);
+            ctx.fillText('TETO / PAINEL', 270, 135);
+
+            damagePoints.forEach((p, idx) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ef4444';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.fillText(String(idx + 1), p.x - 3, p.y + 3);
+            });
+
+            document.getElementById('damage-count').textContent = `${damagePoints.length} avarias marcadas`;
+        }
+
+        document.getElementById('damage-canvas')?.addEventListener('pointerdown', function(e) {
+            const rect = this.getBoundingClientRect();
+            const scaleX = this.width / rect.width;
+            const scaleY = this.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            damagePoints.push({ x, y });
+            drawCarDiagram();
+        });
+
+        function clearDamageCanvas() {
+            damagePoints = [];
+            drawCarDiagram();
+        }
+
+        // --- CAMERA & MEDIA CAPTURE ---
+        async function startCamera(facingMode) {
+            stopCamera();
+            const videoEl = document.getElementById('video-preview');
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                videoEl.srcObject = cameraStream;
+                videoEl.classList.remove('hidden');
+                videoEl.classList.toggle('mirror-video', facingMode === 'user');
+                document.getElementById('btn-snapshot').disabled = false;
+            } catch (err) {
+                showToast('Não foi possível acessar a câmera.', 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+            const videoEl = document.getElementById('video-preview');
+            videoEl.srcObject = null;
+            videoEl.classList.add('hidden');
+            document.getElementById('btn-snapshot').disabled = true;
+        }
+
+        function takeSnapshot() {
+            const videoEl = document.getElementById('video-preview');
+            const canvas = document.getElementById('photo-canvas');
+            if (!videoEl.srcObject) return;
+
+            canvas.width = videoEl.videoWidth || 640;
+            canvas.height = videoEl.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+
+            if (videoEl.classList.contains('mirror-video')) {
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                currentInspectionMedia.push({
+                    id: Date.now(),
+                    tipo: 'FOTO',
+                    url: url,
+                    blob: blob,
+                    nome: `Foto_${new Date().toLocaleTimeString().replace(/:/g, '-')}.jpg`
+                });
+                renderMediaGallery();
+                showToast('Foto tirada com sucesso!', 'success');
+            }, 'image/jpeg', 0.85);
+        }
+
+        async function toggleVideoRecording() {
+            const btn = document.getElementById('btn-video-rec');
+            const lbl = document.getElementById('video-rec-lbl');
+            const timerOverlay = document.getElementById('rec-timer-overlay');
+
+            if (!isVideoRecording) {
+                if (!cameraStream) {
+                    try {
+                        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+                        document.getElementById('video-preview').srcObject = cameraStream;
+                        document.getElementById('video-preview').classList.remove('hidden');
+                    } catch (e) {
+                        return showToast('Permissão de Câmera/Microfone negada.', 'error');
+                    }
+                }
+
+                let options = { mimeType: 'video/webm;codecs=vp9' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/mp4' };
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) options = {};
+                }
+
+                try {
+                    mediaRecorder = new MediaRecorder(cameraStream, options);
+                    recordedVideoChunks = [];
+                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedVideoChunks.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedVideoChunks, { type: options.mimeType || 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        currentInspectionMedia.push({
+                            id: Date.now(),
+                            tipo: 'VIDEO',
+                            url: url,
+                            blob: blob,
+                            nome: `Video_${new Date().toLocaleTimeString().replace(/:/g, '-')}.mp4`
+                        });
+                        renderMediaGallery();
+                        showToast('Vídeo salvo!', 'success');
+                    };
+
+                    mediaRecorder.start();
+                    isVideoRecording = true;
+                    btn.classList.add('rec-pulse');
+                    lbl.textContent = 'Parar Gravação';
+                    timerOverlay.classList.remove('hidden');
+
+                    videoSeconds = 0;
+                    videoTimerInterval = setInterval(() => {
+                        videoSeconds++;
+                        const m = String(Math.floor(videoSeconds / 60)).padStart(2, '0');
+                        const s = String(videoSeconds % 60).padStart(2, '0');
+                        document.getElementById('rec-time-display').textContent = `${m}:${s}`;
+                    }, 1000);
+                } catch (e) {
+                    showToast('Erro ao gravar vídeo.', 'error');
+                }
+            } else {
+                mediaRecorder.stop();
+                isVideoRecording = false;
+                btn.classList.remove('rec-pulse');
+                lbl.textContent = 'Gravar Vídeo';
+                timerOverlay.classList.add('hidden');
+                clearInterval(videoTimerInterval);
+            }
+        }
+
+        function handleFileUpload(evt) {
+            const files = evt.target.files;
+            if (!files || !files.length) return;
+            Array.from(files).forEach(file => {
+                const isVideo = file.type.startsWith('video');
+                currentInspectionMedia.push({
+                    id: Date.now() + Math.random(),
+                    tipo: isVideo ? 'VIDEO' : 'FOTO',
+                    url: URL.createObjectURL(file),
+                    blob: file,
+                    nome: file.name
+                });
+            });
+            renderMediaGallery();
+        }
+
+        function renderMediaGallery() {
+            const container = document.getElementById('media-gallery');
+            document.getElementById('media-count').textContent = currentInspectionMedia.length;
+
+            if (currentInspectionMedia.length === 0) {
+                container.innerHTML = `<p id="no-media-msg" class="col-span-full text-center text-xs text-slate-400 py-4">Nenhuma mídia anexada.</p>`;
+                return;
+            }
+
+            container.innerHTML = currentInspectionMedia.map((m, idx) => `
+                <div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-black aspect-square">
+                    ${m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-full object-cover">` : `<video src="${m.url}" class="w-full h-full object-cover"></video>`}
+                    <button type="button" onclick="removeMedia(${idx})" class="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full text-xs">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        function removeMedia(idx) {
+            currentInspectionMedia.splice(idx, 1);
+            renderMediaGallery();
+        }
+
+        // --- VOICE DICTATION ---
+        function toggleAudioDictation() {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) return showToast('Ditado de voz não suportado neste navegador.', 'warning');
+
+            const btnLbl = document.getElementById('audio-lbl');
+            const interimEl = document.getElementById('voice-interim');
+            const obsBox = document.getElementById('inp-obs');
+
+            if (!speechRecognition) {
+                speechRecognition = new SpeechRec();
+                speechRecognition.lang = 'pt-BR';
+                speechRecognition.continuous = true;
+                speechRecognition.interimResults = true;
+
+                speechRecognition.onresult = (evt) => {
+                    let text = '';
+                    for (let i = evt.resultIndex; i < evt.results.length; i++) {
+                        text += evt.results[i][0].transcript;
+                    }
+                    interimEl.textContent = "Ouvindo: " + text;
+                    if (evt.results[evt.results.length - 1].isFinal) {
+                        obsBox.value += (obsBox.value ? ' ' : '') + text;
+                        interimEl.textContent = '';
+                    }
+                };
+            }
+
+            if (!isAudioRecording) {
+                speechRecognition.start();
+                isAudioRecording = true;
+                btnLbl.textContent = 'Ouvindo...';
+            } else {
+                speechRecognition.stop();
+                isAudioRecording = false;
+                btnLbl.textContent = 'Gravar Voz';
+                interimEl.textContent = '';
+            }
+        }
+
+        // --- REVISION SUMMARY ---
+        async function updateReviewSummary() {
+            const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+            const cliente = document.getElementById('inp-cliente').value.trim();
+            const allServices = await db.getAll('servicos');
+
+            const wash = allServices.find(s => s.id === selectedWashId);
+            let total = wash ? wash.preco : 0;
+            const extraNames = [];
+
+            selectedExtraIds.forEach(id => {
+                const ext = allServices.find(s => s.id === id);
+                if (ext) {
+                    total += ext.preco;
+                    extraNames.push(ext.nome);
+                }
+            });
+
+            document.getElementById('rev-placa').textContent = placa;
+            document.getElementById('rev-cliente').textContent = cliente;
+            document.getElementById('rev-lavagem').textContent = wash ? `${wash.nome} (R$ ${wash.preco.toFixed(2)})` : 'Nenhum';
+            document.getElementById('rev-extras').textContent = extraNames.length ? extraNames.join(', ') : 'Nenhum';
+            document.getElementById('rev-total').textContent = `R$ ${total.toFixed(2)}`;
+
+            const rawData = `${placa}-${cliente}-${total}-${Date.now()}`;
+            const msgUint8 = new TextEncoder().encode(rawData);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            document.getElementById('rev-hash').textContent = `SHA256:${hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32)}...`;
+        }
+
+        // --- SAVE NEW ENTRADA (CHECK-IN) ---
+        async function saveInspectionRDP() {
+            const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+            const cliente = document.getElementById('inp-cliente').value.trim();
+            const modelo = document.getElementById('inp-modelo').value.trim();
+            const telefone = document.getElementById('inp-telefone').value.trim();
+            const obs = document.getElementById('inp-obs').value.trim();
+
+            if (!placa || !cliente || !selectedWashId) return showToast('Preencha os campos obrigatórios', 'error');
+
+            const allServices = await db.getAll('servicos');
+            const wash = allServices.find(s => s.id === selectedWashId);
+
+            let valorAdicionais = 0;
+            const extraDetails = [];
+            selectedExtraIds.forEach(id => {
+                const ext = allServices.find(s => s.id === id);
+                if (ext) {
+                    valorAdicionais += ext.preco;
+                    extraDetails.push({ id: ext.id, nome: ext.nome, preco: ext.preco });
+                }
+            });
+
+            const valorTotal = (wash ? wash.preco : 0) + valorAdicionais;
+
+            const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia'], 'readwrite');
+
+            // Cliente
+            let clienteId;
+            const existingClients = await tx.objectStore('clientes').getAll();
+            const foundClient = existingClients.find(c => c.nome.toLowerCase() === cliente.toLowerCase());
+            if (foundClient) {
+                clienteId = foundClient.id;
+            } else {
+                clienteId = await tx.objectStore('clientes').add({
+                    nome: cliente,
+                    telefone: telefone,
+                    criado_em: new Date().toISOString()
+                });
+            }
+
+            // Veículo
+            let veiculoId;
+            const existingVehicles = await tx.objectStore('veiculos').getAll();
+            const foundVehicle = existingVehicles.find(v => v.placa === placa);
+            if (foundVehicle) {
+                veiculoId = foundVehicle.id;
+            } else {
+                veiculoId = await tx.objectStore('veiculos').add({
+                    placa: placa,
+                    modelo: modelo || 'Geral',
+                    cliente_id: clienteId,
+                    criado_em: new Date().toISOString()
+                });
+            }
+
+            // Processo (Entrada)
+            const processoId = await tx.objectStore('processos').add({
+                veiculo_id: veiculoId,
+                cliente_id: clienteId,
+                placa: placa,
+                cliente_nome: cliente,
+                modelo: modelo,
+                data_entrada: new Date().toISOString(),
+                data_saida: null,
+                status: 'EM_ANDAMENTO',
+                lavagem: wash ? { id: wash.id, nome: wash.nome, preco: wash.preco } : null,
+                servicos_adicionais: extraDetails,
+                valor_lavagem: wash ? wash.preco : 0,
+                valor_adicionais: valorAdicionais,
+                valor_total: valorTotal,
+                forma_pagamento: null,
+                checklist: {
+                    chave: document.getElementById('chk-chave').checked,
+                    portamalas: document.getElementById('chk-portamalas').checked,
+                    documentos: document.getElementById('chk-documentos').checked,
+                    estepe: document.getElementById('chk-estepe').checked
+                },
+                danos_mapa: damagePoints,
+                observacoes: obs,
+                synced: false
+            });
+
+            // Mídias
+            for (const media of currentInspectionMedia) {
+                await tx.objectStore('registros_midia').add({
+                    processo_id: processoId,
+                    tipo: media.tipo,
+                    nome: media.nome,
+                    url: media.url,
+                    criado_em: new Date().toISOString()
+                });
+            }
+
+            await tx.done;
+
+            showToast('Entrada do Veículo registrada com sucesso!', 'success');
+            resetRdpForm();
+            switchTab('dashboard');
+        }
+
+        function resetRdpForm() {
+            document.getElementById('rdp-form').reset();
+            currentInspectionMedia = [];
+            damagePoints = [];
+            selectedWashId = null;
+            selectedExtraIds.clear();
+            renderMediaGallery();
+            stopCamera();
+            setStep(1);
+        }
+
+        // --- DASHBOARD RENDER & SAÍDA (CHECKOUT) ---
+        async function loadDashboardData() {
+            if (!db) return;
+            const tx = db.transaction('processos', 'readonly');
+            const all = await tx.store.getAll();
+
+            const pending = all.filter(p => p.status === 'EM_ANDAMENTO').length;
+            const completed = all.filter(p => p.status === 'CONCLUIDO').length;
+
+            // Faturamento Hoje
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayRevenue = all
+                .filter(p => p.status === 'CONCLUIDO' && p.data_saida && p.data_saida.startsWith(todayStr))
+                .reduce((acc, curr) => acc + (curr.valor_total || 0), 0);
+
+            document.getElementById('stat-pending').textContent = pending;
+            document.getElementById('stat-completed').textContent = completed;
+            document.getElementById('stat-revenue').textContent = `R$ ${todayRevenue.toFixed(2)}`;
+            document.getElementById('stat-total').textContent = all.length;
+
+            filterInspections(all);
+        }
+
+        async function filterInspections(all) {
+            if (!all) all = await db.getAll('processos');
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const statusFilter = document.getElementById('filter-status').value;
+
+            const filtered = all.filter(p => {
+                const matchesQuery = p.placa.toLowerCase().includes(query) || p.cliente_nome.toLowerCase().includes(query) || (p.lavagem && p.lavagem.nome.toLowerCase().includes(query));
+                const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+                return matchesQuery && matchesStatus;
+            });
+
+            renderInspectionList(filtered);
+        }
+
+        function renderInspectionList(processos) {
+            const listEl = document.getElementById('inspection-list');
+            if (!processos || processos.length === 0) {
+                listEl.innerHTML = `
+                <div class="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400">
+                    <i data-lucide="car" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
+                    <p class="text-sm font-medium">Nenhum veículo encontrado com este filtro.</p>
+                </div>`;
+                lucide.createIcons();
+                return;
+            }
+
+            listEl.innerHTML = processos.map(p => {
+                const dateEntradaStr = new Date(p.data_entrada).toLocaleString('pt-BR');
+                const isPending = p.status === 'EM_ANDAMENTO';
+                const isCancelled = p.status === 'CANCELADO';
+                const lavagemNome = p.lavagem ? p.lavagem.nome : 'Sem lavagem';
+                const totalFormatted = (p.valor_total || 0).toFixed(2);
+
+                let badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+                let statusLabel = 'NO PÁTIO (EM ANDAMENTO)';
+                if (p.status === 'CONCLUIDO') {
+                    badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+                    statusLabel = `SAÍDA REALIZADA (${p.forma_pagamento || 'PAGO'})`;
+                } else if (isCancelled) {
+                    badgeClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+                    statusLabel = `SERVIÇO ESTORNADO / CANCELADO`;
+                }
+
+                return `
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-brand-500/50 transition">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex flex-col items-center justify-center text-brand-600 dark:text-brand-400 font-bold font-mono text-xs border border-slate-200 dark:border-slate-700">
+                            <span>${p.placa.substring(0, 3)}</span>
+                            <span class="text-[10px] text-slate-400">${p.placa.substring(3)}</span>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${p.placa}</h4>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
+                                    ${statusLabel}
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-600 dark:text-slate-300">${p.cliente_nome} • <span class="font-semibold text-brand-600">${lavagemNome}</span></p>
+                            <p class="text-[10px] text-slate-400 mt-0.5"><i data-lucide="clock" class="w-3 h-3 inline mr-1"></i>Entrada: ${dateEntradaStr}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-slate-800">
+                        <div class="text-left sm:text-right">
+                            <span class="text-[10px] text-slate-400 block uppercase">Valor Total</span>
+                            <span class="font-mono font-extrabold ${isCancelled ? 'line-through text-slate-400' : 'text-emerald-600 dark:text-emerald-400'} text-base">R$ ${totalFormatted}</span>
+                        </div>
+                        
+                        <div class="flex items-center gap-1.5">
+                            ${isPending ? `
+                            <button onclick="openModalCheckout(${p.id})" class="touch-target px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Saída
+                            </button>` : ''}
+
+                            ${!isCancelled ? `
+                            <button onclick="openModalRefund(${p.id})" title="Estornar / Cancelar Serviço" class="touch-target p-2 bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-200 transition">
+                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            </button>` : ''}
+
+                            <button onclick="viewDetails(${p.id})" title="Ver Ticket / Detalhes" class="touch-target p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 transition">
+                                <i data-lucide="receipt" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        // --- CHECKOUT (SAÍDA) MODAL FLOW ---
+        async function openModalCheckout(id) {
+            const proc = await db.get('processos', id);
+            if (!proc) return;
+
+            document.getElementById('co-processo-id').value = proc.id;
+            document.getElementById('co-placa').textContent = proc.placa;
+            document.getElementById('co-cliente').textContent = proc.cliente_nome;
+            document.getElementById('co-entrada').textContent = new Date(proc.data_entrada).toLocaleString('pt-BR');
+
+            const servs = [];
+            if (proc.lavagem) servs.push(proc.lavagem.nome);
+            if (proc.servicos_adicionais) proc.servicos_adicionais.forEach(s => servs.push(s.nome));
+            document.getElementById('co-servicos').textContent = servs.join(', ') || 'Nenhum';
+
+            document.getElementById('co-total').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
+
+            document.getElementById('modal-checkout').classList.remove('hidden');
+        }
+
+        function closeModalCheckout() {
+            document.getElementById('modal-checkout').classList.add('hidden');
+        }
+
+        async function confirmCheckout() {
+            const id = parseInt(document.getElementById('co-processo-id').value);
+            const formaPagamento = document.querySelector('input[name="pay-method"]:checked').value;
+
+            const tx = db.transaction('processos', 'readwrite');
+            const proc = await tx.store.get(id);
+
+            if (proc) {
+                proc.status = 'CONCLUIDO';
+                proc.data_saida = new Date().toISOString();
+                proc.forma_pagamento = formaPagamento;
+                await tx.store.put(proc);
+                await tx.done;
+
+                closeModalCheckout();
+                showToast(`Saída do veículo ${proc.placa} registrada! Pagamento em ${formaPagamento}`, 'success');
+                loadDashboardData();
+            }
+        }
+
+        // --- VIEW DETAILS & PRINT TICKET ---
+        async function viewDetails(id) {
+            const proc = await db.get('processos', id);
+            if (!proc) return;
+
+            const midias = await db.getAllFromIndex('registros_midia', 'processo_id', id);
+
+            const content = document.getElementById('modal-details-content');
+            const printEl = document.getElementById('printable-ticket');
+
+            const entradaStr = new Date(proc.data_entrada).toLocaleString('pt-BR');
+            const saidaStr = proc.data_saida ? new Date(proc.data_saida).toLocaleString('pt-BR') : 'Veículo no Pátio';
+
+            const lavagemText = proc.lavagem ? `${proc.lavagem.nome} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
+            const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length ? proc.servicos_adicionais.map(s => `${s.nome} (R$ ${s.preco.toFixed(2)})`).join('<br>') : 'Nenhum';
+
+            content.innerHTML = `
+                <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
+                    <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${proc.placa}</strong></div>
+                    <div><span class="text-slate-400">Cliente:</span> <strong>${proc.cliente_nome}</strong></div>
+                    <div><span class="text-slate-400">Entrada:</span> ${entradaStr}</div>
+                    <div><span class="text-slate-400">Saída:</span> ${saidaStr}</div>
+                </div>
+
+                <div class="p-3 bg-brand-50 dark:bg-brand-950/40 rounded-xl space-y-1">
+                    <h5 class="text-xs font-bold uppercase text-brand-700 dark:text-brand-300">Serviços & Faturamento</h5>
+                    <p class="text-xs"><strong>Lavagem:</strong> ${lavagemText}</p>
+                    <p class="text-xs"><strong>Adicionais:</strong> ${extrasText}</p>
+                    <div class="pt-2 border-t border-brand-200 dark:border-brand-800 flex justify-between items-center">
+                        <span class="text-xs font-bold">Valor Total:</span>
+                        <span class="font-mono font-extrabold text-emerald-600 text-base">R$ ${(proc.valor_total || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Checklist RDP</h5>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-2 py-1 rounded text-xs ${proc.checklist?.chave ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Chave no contato</span>
+                        <span class="px-2 py-1 rounded text-xs ${proc.checklist?.portamalas ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Pertences Porta-malas</span>
+                        <span class="px-2 py-1 rounded text-xs ${proc.checklist?.documentos ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Documentos</span>
+                        <span class="px-2 py-1 rounded text-xs ${proc.checklist?.estepe ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Estepe</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Observações</h5>
+                    <p class="text-xs p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">${proc.observacoes || 'Sem observações.'}</p>
+                </div>
+
+                <div>
+                    <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Mídias Vinculadas (${midias.length})</h5>
+                    <div class="grid grid-cols-3 gap-2">
+                        ${midias.map(m => m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-20 object-cover rounded-lg">` : `<video src="${m.url}" controls class="w-full h-20 bg-black rounded-lg"></video>`).join('')}
+                    </div>
+                </div>
+            `;
+
+            // Setup Printable Ticket Content
+            if (printEl) {
+                printEl.innerText = `===================================
+        LAVA_CAR PRO RDP
+===================================
+COMPROVANTE DE SERVIÇOS
+-----------------------------------
+PLACA  : ${proc.placa}
+CLIENTE: ${proc.cliente_nome}
+ENTRADA: ${entradaStr}
+SAIDA  : ${saidaStr}
+-----------------------------------
+LAVAGEM    : ${proc.lavagem ? proc.lavagem.nome : 'Sem lavagem'}
+VALOR TOTAL: R$ ${(proc.valor_total || 0).toFixed(2)}
+PAGAMENTO  : ${proc.forma_pagamento || 'PENDENTE'}
+-----------------------------------
+Obrigado pela preferência!
+===================================
+`;
+            }
+
+            document.getElementById('modal-details').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeModalDetails() {
+            document.getElementById('modal-details').classList.add('hidden');
+        }
+
+        // --- SERVICES & PRICES TAB MANAGEMENT ---
+        async function loadServicesTab() {
+            const all = await db.getAll('servicos');
+            const washList = document.getElementById('services-wash-list');
+            const extraList = document.getElementById('services-extra-list');
+
+            const washes = all.filter(s => s.categoria === 'LAVAGEM');
+            const extras = all.filter(s => s.categoria === 'OUTRO');
+
+            if (!simSelectedWashId && washes.length > 0) {
+                simSelectedWashId = washes[0].id;
+            }
+
+            washList.innerHTML = washes.map(s => {
+                const isSel = s.id === simSelectedWashId;
+                return `
+                <div class="p-3.5 rounded-xl border-2 transition flex items-center justify-between gap-3 ${isSel ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
+                    <div onclick="selectSimWash(${s.id})" class="flex-1 cursor-pointer">
+                        <div class="flex items-center gap-2">
+                            <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
+                                ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
+                            </span>
+                            <h5 class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${s.nome}</h5>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">${s.descricao || 'Sem descrição'}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-xs sm:text-sm whitespace-nowrap">R$ ${s.preco.toFixed(2)}</span>
+                        <button onclick="event.stopPropagation(); openModalEditService(${s.id});" title="Editar Serviço / Valor" class="touch-target text-brand-600 dark:text-brand-400 p-1.5 hover:bg-brand-100 dark:hover:bg-slate-700 rounded-lg transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="event.stopPropagation(); deleteService(${s.id});" title="Excluir Serviço" class="touch-target text-rose-500 p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            extraList.innerHTML = extras.map(s => {
+                const isSel = simSelectedExtraIds.has(s.id);
+                return `
+                <div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${isSel ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
+                    <div onclick="toggleSimExtra(${s.id})" class="flex-1 cursor-pointer flex items-center gap-2">
+                        <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+                        <div>
+                            <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
+                            <p class="text-[10px] text-slate-500">${s.descricao || 'Sem descrição'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap">R$ ${s.preco.toFixed(2)}</span>
+                        <button onclick="event.stopPropagation(); openModalEditService(${s.id});" title="Editar Serviço / Valor" class="touch-target text-emerald-600 dark:text-emerald-400 p-1.5 hover:bg-emerald-100 dark:hover:bg-slate-700 rounded-lg transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="event.stopPropagation(); deleteService(${s.id});" title="Excluir Serviço" class="touch-target text-rose-500 p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            updateSimCalculations(all);
+            lucide.createIcons();
+        }
+
+        function selectSimWash(id) {
+            simSelectedWashId = id;
+            loadServicesTab();
+        }
+
+        function toggleSimExtra(id) {
+            if (simSelectedExtraIds.has(id)) {
+                simSelectedExtraIds.delete(id);
+            } else {
+                simSelectedExtraIds.add(id);
+            }
+            loadServicesTab();
+        }
+
+        function updateSimCalculations(allServices) {
+            const wash = allServices.find(s => s.id === simSelectedWashId);
+            let total = wash ? wash.preco : 0;
+
+            let extraCount = 0;
+            simSelectedExtraIds.forEach(id => {
+                const ext = allServices.find(s => s.id === id);
+                if (ext) {
+                    total += ext.preco;
+                    extraCount++;
+                }
+            });
+
+            const washNameEl = document.getElementById('sim-wash-name');
+            const extrasCountEl = document.getElementById('sim-extras-count');
+            const totalDisplayEl = document.getElementById('sim-total-display');
+
+            if (washNameEl) washNameEl.textContent = wash ? wash.nome : 'Sem lavagem';
+            if (extrasCountEl) extrasCountEl.textContent = `+${extraCount} adicionais`;
+            if (totalDisplayEl) totalDisplayEl.textContent = `R$ ${total.toFixed(2)}`;
+        }
+
+        function openModalAddService() {
+            document.getElementById('modal-add-service').classList.remove('hidden');
+        }
+        function closeModalAddService() {
+            document.getElementById('modal-add-service').classList.add('hidden');
+        }
+
+        async function openModalEditService(id) {
+            const serv = await db.get('servicos', id);
+            if (!serv) return;
+
+            document.getElementById('edit-serv-id').value = serv.id;
+            document.getElementById('edit-serv-nome').value = serv.nome;
+            document.getElementById('edit-serv-cat').value = serv.categoria;
+            document.getElementById('edit-serv-preco').value = serv.preco;
+            document.getElementById('edit-serv-desc').value = serv.descricao || '';
+
+            document.getElementById('modal-edit-service').classList.remove('hidden');
+        }
+
+        function closeModalEditService() {
+            document.getElementById('modal-edit-service').classList.add('hidden');
+        }
+
+        async function saveEditService() {
+            const id = parseInt(document.getElementById('edit-serv-id').value);
+            const nome = document.getElementById('edit-serv-nome').value.trim();
+            const cat = document.getElementById('edit-serv-cat').value;
+            const preco = parseFloat(document.getElementById('edit-serv-preco').value);
+            const desc = document.getElementById('edit-serv-desc').value.trim();
+
+            if (!id || !nome || isNaN(preco)) return showToast('Preencha os campos obrigatórios', 'error');
+
+            const serv = await db.get('servicos', id);
+            if (serv) {
+                serv.nome = nome;
+                serv.categoria = cat;
+                serv.preco = preco;
+                serv.descricao = desc;
+                serv.atualizado_em = new Date().toISOString();
+
+                await db.put('servicos', serv);
+                closeModalEditService();
+                showToast(`Preço do serviço "${nome}" alterado para R$ ${preco.toFixed(2)} com sucesso!`, 'success');
+                loadServicesTab();
+            }
+        }
+
+        async function saveNewService() {
+            const nome = document.getElementById('new-serv-nome').value.trim();
+            const cat = document.getElementById('new-serv-cat').value;
+            const preco = parseFloat(document.getElementById('new-serv-preco').value);
+            const desc = document.getElementById('new-serv-desc').value.trim();
+
+            if (!nome || isNaN(preco)) return showToast('Preencha os campos obrigatórios', 'error');
+
+            await db.add('servicos', {
+                nome, categoria: cat, preco, descricao: desc, criado_em: new Date().toISOString()
+            });
+
+            closeModalAddService();
+            showToast('Serviço cadastrado com sucesso!', 'success');
+            loadServicesTab();
+        }
+
+        async function deleteService(id) {
+            if (confirm('Deseja excluir este serviço?')) {
+                await db.delete('servicos', id);
+                showToast('Serviço removido.', 'warning');
+                loadServicesTab();
+            }
+        }
+
+        // --- CLIENTS & SEED & UTILS ---
+        async function loadClientsData() {
+            const clients = await db.getAll('clientes');
+            const container = document.getElementById('clients-list');
+
+            if (!clients || clients.length === 0) {
+                container.innerHTML = `<p class="col-span-full text-center text-xs text-slate-400 py-8">Nenhum cliente cadastrado.</p>`;
+                return;
+            }
+
+            container.innerHTML = clients.map(c => `
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3">
+                    <div class="w-10 h-10 bg-brand-100 dark:bg-brand-900/50 rounded-xl flex items-center justify-center text-brand-600 font-bold">
+                        ${c.nome.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm">${c.nome}</h4>
+                        <p class="text-xs text-slate-500">${c.telefone || 'Sem telefone'}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadSeedData() {
+            const tx = db.transaction(['clientes', 'veiculos', 'processos'], 'readwrite');
+            const cId = await tx.objectStore('clientes').add({ nome: 'Ana Paula Souza', telefone: '(11) 97777-6666', criado_em: new Date().toISOString() });
+            const vId = await tx.objectStore('veiculos').add({ placa: 'BRA2E19', modelo: 'Jeep Compass', cliente_id: cId, criado_em: new Date().toISOString() });
+
+            await tx.objectStore('processos').add({
+                veiculo_id: vId,
+                cliente_id: cId,
+                placa: 'BRA2E19',
+                cliente_nome: 'Ana Paula Souza',
+                modelo: 'Jeep Compass',
+                data_entrada: new Date().toISOString(),
+                data_saida: null,
+                status: 'EM_ANDAMENTO',
+                lavagem: { id: 2, nome: 'Lavagem Completa', preco: 80.00 },
+                servicos_adicionais: [{ id: 5, nome: 'Cera de Carnaúba', preco: 45.00 }],
+                valor_lavagem: 80.00,
+                valor_adicionais: 45.00,
+                valor_total: 125.00,
+                checklist: { chave: true, portamalas: true, documentos: true, estepe: true },
+                danos_mapa: [],
+                observacoes: 'Cliente solicitou atenção especial nas caixas de roda.',
+                synced: false
+            });
+
+            await tx.done;
+            showToast('Dados demonstrativos carregados!', 'success');
+            loadDashboardData();
+        }
+
+        function triggerManualSync() {
+            showToast('Sincronizando com nuvem...', 'info');
+            setTimeout(() => showToast('Inspeções e caixas sincronizados com sucesso!', 'success'), 1000);
+        }
+
+        async function exportBackupJSON() {
+            const data = {
+                clientes: await db.getAll('clientes'),
+                veiculos: await db.getAll('veiculos'),
+                processos: await db.getAll('processos'),
+                servicos: await db.getAll('servicos'),
+                exportDate: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `LavaCar_Backup_${Date.now()}.json`;
+            a.click();
+        }
+
+        async function clearAllData() {
+            if (confirm('Apagar todos os dados locais?')) {
+                const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'servicos'], 'readwrite');
+                await tx.objectStore('clientes').clear();
+                await tx.objectStore('veiculos').clear();
+                await tx.objectStore('processos').clear();
+                await tx.objectStore('registros_midia').clear();
+                await tx.objectStore('servicos').clear();
+                await tx.done;
+                showToast('Dados apagados.', 'warning');
+                initDB();
+            }
+        }
+
+        // --- REFUND (ESTORNO) FLOW ---
+        async function openModalRefund(id) {
+            const proc = await db.get('processos', id);
+            if (!proc) return;
+
+            document.getElementById('ref-processo-id').value = proc.id;
+            document.getElementById('ref-placa').textContent = proc.placa;
+            document.getElementById('ref-cliente').textContent = proc.cliente_nome;
+            document.getElementById('ref-valor-orig').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
+            document.getElementById('ref-valor').value = (proc.valor_total || 0).toFixed(2);
+            document.getElementById('ref-motivo').value = '';
+
+            document.getElementById('modal-refund').classList.remove('hidden');
+        }
+
+        function closeModalRefund() {
+            document.getElementById('modal-refund').classList.add('hidden');
+        }
+
+        async function confirmRefundService() {
+            const id = parseInt(document.getElementById('ref-processo-id').value);
+            const motivo = document.getElementById('ref-motivo').value.trim();
+            const valorEstorno = parseFloat(document.getElementById('ref-valor').value);
+
+            if (!id || !motivo || isNaN(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
+
+            const tx = db.transaction('processos', 'readwrite');
+            const proc = await tx.store.get(id);
+
+            if (proc) {
+                proc.status = 'CANCELADO';
+                proc.data_estorno = new Date().toISOString();
+                proc.motivo_estorno = motivo;
+                proc.valor_estornado = valorEstorno;
+                await tx.store.put(proc);
+                await tx.done;
+
+                closeModalRefund();
+                showToast(`Estorno do serviço (${proc.placa}) no valor de R$ ${valorEstorno.toFixed(2)} confirmado!`, 'warning');
+                loadDashboardData();
+                if (currentTab === 'reports') loadDailyReport();
+            }
+        }
+
+        // --- REPORT SUB-TABS & CALCULATIONS ---
+        function switchReportTab(subTab) {
+            currentReportTab = subTab;
+            ['daily', 'monthly', 'products'].forEach(s => {
+                const sec = document.getElementById(`rep-sec-${s}`);
+                const btn = document.getElementById(`rtab-${s}`);
+                if (s === subTab) {
+                    sec.classList.remove('hidden');
+                    btn.className = "pb-2 font-bold text-sm text-brand-600 border-b-2 border-brand-600 transition flex items-center gap-1.5";
+                } else {
+                    sec.classList.add('hidden');
+                    btn.className = "pb-2 font-bold text-sm text-slate-400 hover:text-slate-600 border-b-2 border-transparent transition flex items-center gap-1.5";
+                }
+            });
+
+            if (subTab === 'daily') loadDailyReport();
+            if (subTab === 'monthly') loadMonthlyReport();
+            if (subTab === 'products') loadProductsList();
+        }
+
+        async function loadDailyReport() {
+            const selectedDate = document.getElementById('rep-daily-date').value || new Date().toISOString().split('T')[0];
+            const all = await db.getAll('processos');
+
+            const dayProc = all.filter(p => {
+                const entDate = p.data_entrada ? p.data_entrada.split('T')[0] : '';
+                const exitDate = p.data_saida ? p.data_saida.split('T')[0] : '';
+                const estDate = p.data_estorno ? p.data_estorno.split('T')[0] : '';
+                return entDate === selectedDate || exitDate === selectedDate || estDate === selectedDate;
+            });
+
+            let gross = 0;
+            let refunds = 0;
+            let count = 0;
+
+            let pix = 0, credit = 0, debit = 0, cash = 0;
+
+            dayProc.forEach(p => {
+                if (p.status === 'CONCLUIDO') {
+                    const v = p.valor_total || 0;
+                    gross += v;
+                    count++;
+                    if (p.forma_pagamento === 'PIX') pix += v;
+                    else if (p.forma_pagamento === 'CARTAO_CREDITO') credit += v;
+                    else if (p.forma_pagamento === 'CARTAO_DEBITO') debit += v;
+                    else if (p.forma_pagamento === 'DINHEIRO') cash += v;
+                } else if (p.status === 'CANCELADO') {
+                    refunds += (p.valor_estornado || p.valor_total || 0);
+                }
+            });
+
+            const net = gross - refunds;
+
+            document.getElementById('daily-gross').textContent = `R$ ${gross.toFixed(2)}`;
+            document.getElementById('daily-refunds').textContent = `R$ ${refunds.toFixed(2)}`;
+            document.getElementById('daily-net').textContent = `R$ ${net.toFixed(2)}`;
+            document.getElementById('daily-count').textContent = count;
+
+            document.getElementById('pay-pix').textContent = `R$ ${pix.toFixed(2)}`;
+            document.getElementById('pay-credit').textContent = `R$ ${credit.toFixed(2)}`;
+            document.getElementById('pay-debit').textContent = `R$ ${debit.toFixed(2)}`;
+            document.getElementById('pay-cash').textContent = `R$ ${cash.toFixed(2)}`;
+
+            const listEl = document.getElementById('daily-tx-list');
+            if (dayProc.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Nenhuma transação registrada nesta data.</p>`;
+            } else {
+                listEl.innerHTML = dayProc.map(p => `
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold text-slate-900 dark:text-white">${p.placa}</span>
+                            <span>• ${p.cliente_nome}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${p.status === 'CONCLUIDO' ? 'bg-emerald-100 text-emerald-800' : p.status === 'CANCELADO' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${p.status}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-mono font-bold ${p.status === 'CANCELADO' ? 'text-rose-600 line-through' : 'text-emerald-600'}">R$ ${(p.valor_total || 0).toFixed(2)}</span>
+                            ${p.forma_pagamento ? `<span class="block text-[10px] text-slate-400">${p.forma_pagamento}</span>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        async function loadMonthlyReport() {
+            const selectedMonth = document.getElementById('rep-monthly-month').value || new Date().toISOString().substring(0, 7);
+            const all = await db.getAll('processos');
+
+            const monthProc = all.filter(p => {
+                const entMonth = p.data_entrada ? p.data_entrada.substring(0, 7) : '';
+                const exitMonth = p.data_saida ? p.data_saida.substring(0, 7) : '';
+                return entMonth === selectedMonth || exitMonth === selectedMonth;
+            });
+
+            let gross = 0;
+            let refunds = 0;
+            let count = 0;
+
+            monthProc.forEach(p => {
+                if (p.status === 'CONCLUIDO') {
+                    gross += (p.valor_total || 0);
+                    count++;
+                } else if (p.status === 'CANCELADO') {
+                    refunds += (p.valor_estornado || p.valor_total || 0);
+                }
+            });
+
+            const net = gross - refunds;
+            const avg = count > 0 ? (gross / count) : 0;
+
+            document.getElementById('monthly-gross').textContent = `R$ ${gross.toFixed(2)}`;
+            document.getElementById('monthly-refunds').textContent = `R$ ${refunds.toFixed(2)}`;
+            document.getElementById('monthly-net').textContent = `R$ ${net.toFixed(2)}`;
+            document.getElementById('monthly-avg').textContent = `R$ ${avg.toFixed(2)}`;
+
+            const listEl = document.getElementById('monthly-summary-list');
+            if (monthProc.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Nenhum atendimento registrado neste mês.</p>`;
+            } else {
+                listEl.innerHTML = monthProc.map(p => `
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
+                        <div>
+                            <strong class="font-mono text-slate-900 dark:text-white">${p.placa}</strong> - ${p.cliente_nome}
+                            <span class="text-[10px] text-slate-400 block">${new Date(p.data_entrada).toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-mono font-bold ${p.status === 'CANCELADO' ? 'text-rose-600 line-through' : 'text-emerald-600'}">R$ ${(p.valor_total || 0).toFixed(2)}</span>
+                            <span class="block text-[10px] text-slate-400">${p.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // --- PRODUCT LEVEL REPORT & BAR LOGIC ---
+        async function loadProductsList() {
+            const products = await db.getAll('produtos');
+            const grid = document.getElementById('products-grid');
+            const lowBadge = document.getElementById('badge-low-products');
+
+            let lowCount = 0;
+
+            if (!products || products.length === 0) {
+                grid.innerHTML = `<p class="col-span-full text-center text-xs text-slate-400 py-8">Nenhum produto cadastrado.</p>`;
+                lowBadge.classList.add('hidden');
+                return;
+            }
+
+            grid.innerHTML = products.map(p => {
+                const perc = p.percentual !== undefined ? p.percentual : (p.nivel === 'CHEIO' ? 90 : p.nivel === 'MEIO' ? 50 : 20);
+                
+                let levelColor = 'bg-emerald-500';
+                let badgeStyle = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+                let levelLabel = 'CHEIO 🟢';
+
+                if (perc < 35 || p.nivel === 'BAIXO') {
+                    levelColor = 'bg-rose-500 animate-pulse';
+                    badgeStyle = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-bold';
+                    levelLabel = 'BAIXO / REPOSIÇÃO 🔴';
+                    lowCount++;
+                } else if (perc < 70 || p.nivel === 'MEIO') {
+                    levelColor = 'bg-amber-500';
+                    badgeStyle = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+                    levelLabel = 'MEIO 🟡';
+                }
+
+                return `
+                <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <h5 class="font-bold text-slate-900 dark:text-white text-sm">${p.nome}</h5>
+                            <p class="text-xs text-slate-500">${p.descricao || 'Sem descrição'}</p>
+                            <span class="font-mono font-extrabold text-brand-600 text-xs mt-1 block">R$ ${p.valor.toFixed(2)}</span>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${badgeStyle}">
+                            ${levelLabel}
+                        </span>
+                    </div>
+
+                    <!-- Visual Product Level Indicator Bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-[10px] text-slate-400 font-medium">
+                            <span>Nível do Produto:</span>
+                            <span class="font-bold font-mono">${perc}%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200 dark:border-slate-700">
+                            <div class="${levelColor} h-full rounded-full transition-all duration-500" style="width: ${perc}%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Level Change Buttons -->
+                    <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div class="flex items-center gap-1">
+                            <button onclick="updateProductLevelQuick(${p.id}, 'CHEIO', 90)" title="Marcar Cheio" class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold hover:bg-emerald-200 transition">Cheio</button>
+                            <button onclick="updateProductLevelQuick(${p.id}, 'MEIO', 50)" title="Marcar Meio" class="px-2 py-1 bg-amber-100 text-amber-800 rounded text-[10px] font-bold hover:bg-amber-200 transition">Meio</button>
+                            <button onclick="updateProductLevelQuick(${p.id}, 'BAIXO', 20)" title="Marcar Baixo" class="px-2 py-1 bg-rose-100 text-rose-800 rounded text-[10px] font-bold hover:bg-rose-200 transition">Baixo</button>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="openModalProduct(${p.id})" class="text-brand-600 p-1 hover:bg-brand-50 rounded"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="deleteProduct(${p.id})" class="text-rose-500 p-1 hover:bg-rose-50 rounded"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            if (lowCount > 0) {
+                lowBadge.textContent = lowCount;
+                lowBadge.classList.remove('hidden');
+            } else {
+                lowBadge.classList.add('hidden');
+            }
+
+            lucide.createIcons();
+        }
+
+        async function updateProductLevelQuick(id, nivel, percent) {
+            const p = await db.get('produtos', id);
+            if (p) {
+                p.nivel = nivel;
+                p.percentual = percent;
+                await db.put('produtos', p);
+                showToast(`Nível do produto "${p.nome}" atualizado para ${nivel}!`, 'info');
+                loadProductsList();
+            }
+        }
+
+        async function openModalProduct(id = null) {
+            if (id) {
+                const p = await db.get('produtos', id);
+                if (p) {
+                    document.getElementById('prod-id').value = p.id;
+                    document.getElementById('prod-nome').value = p.nome;
+                    document.getElementById('prod-valor').value = p.valor;
+                    document.getElementById('prod-nivel').value = p.nivel;
+                    document.getElementById('prod-percent').value = p.percentual;
+                    document.getElementById('prod-desc').value = p.descricao || '';
+                    document.getElementById('prod-modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-brand-500"></i> Editar Produto & Nível`;
+                }
+            } else {
+                document.getElementById('prod-id').value = '';
+                document.getElementById('prod-nome').value = '';
+                document.getElementById('prod-valor').value = '';
+                document.getElementById('prod-nivel').value = 'CHEIO';
+                document.getElementById('prod-percent').value = '100';
+                document.getElementById('prod-desc').value = '';
+                document.getElementById('prod-modal-title').innerHTML = `<i data-lucide="package" class="w-5 h-5 text-brand-500"></i> Cadastrar Produto & Nível`;
+            }
+            document.getElementById('modal-product').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeModalProduct() {
+            document.getElementById('modal-product').classList.add('hidden');
+        }
+
+        function autoFillProductPercent() {
+            const nivel = document.getElementById('prod-nivel').value;
+            if (nivel === 'CHEIO') document.getElementById('prod-percent').value = 90;
+            if (nivel === 'MEIO') document.getElementById('prod-percent').value = 50;
+            if (nivel === 'BAIXO') document.getElementById('prod-percent').value = 20;
+        }
+
+        async function saveProduct() {
+            const id = document.getElementById('prod-id').value;
+            const nome = document.getElementById('prod-nome').value.trim();
+            const valor = parseFloat(document.getElementById('prod-valor').value);
+            const nivel = document.getElementById('prod-nivel').value;
+            const percentual = parseInt(document.getElementById('prod-percent').value) || 50;
+            const desc = document.getElementById('prod-desc').value.trim();
+
+            if (!nome || isNaN(valor)) return showToast('Preencha os campos obrigatórios do produto', 'error');
+
+            if (id) {
+                const p = await db.get('produtos', parseInt(id));
+                if (p) {
+                    p.nome = nome;
+                    p.valor = valor;
+                    p.nivel = nivel;
+                    p.percentual = percentual;
+                    p.descricao = desc;
+                    await db.put('produtos', p);
+                }
+            } else {
+                await db.add('produtos', { nome, valor, nivel, percentual, descricao: desc, criado_em: new Date().toISOString() });
+            }
+
+            closeModalProduct();
+            showToast('Produto salvo com sucesso!', 'success');
+            loadProductsList();
+        }
+
+        async function deleteProduct(id) {
+            if (confirm('Excluir este produto do estoque?')) {
+                await db.delete('produtos', id);
+                showToast('Produto removido.', 'warning');
+                loadProductsList();
+            }
+        }
+
+        function printBoxClosureReport() {
+            const date = document.getElementById('rep-daily-date').value || new Date().toLocaleDateString('pt-BR');
+            const gross = document.getElementById('daily-gross').textContent;
+            const refunds = document.getElementById('daily-refunds').textContent;
+            const net = document.getElementById('daily-net').textContent;
+            const count = document.getElementById('daily-count').textContent;
+
+            const pix = document.getElementById('pay-pix').textContent;
+            const credit = document.getElementById('pay-credit').textContent;
+            const debit = document.getElementById('pay-debit').textContent;
+            const cash = document.getElementById('pay-cash').textContent;
+
+            const printEl = document.getElementById('printable-ticket');
+            if (!printEl) return;
+
+            printEl.innerText = `===================================
+     LAVA_CAR PRO - FECHAMENTO CAIXA
+===================================
+DATA DE REFERÊNCIA: ${date}
+-----------------------------------
+FATURAMENTO BRUTO : ${gross}
+ESTORNOS/CANCELS  : ${refunds}
+SALDO LÍQUIDO     : ${net}
+TOTAL ATENDIMENTOS: ${count}
+-----------------------------------
+RESUMO POR FORMA DE PAGAMENTO:
+- PIX        : ${pix}
+- C. CRÉDITO : ${credit}
+- C. DÉBITO  : ${debit}
+- DINHEIRO   : ${cash}
+===================================
+`;
+            window.print();
+        }
+
+        // Initialize Application Database & Load Initial View on DOM Ready
+        window.addEventListener('DOMContentLoaded', () => {
+            initDB();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
