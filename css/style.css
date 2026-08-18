@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.touch-target {
+    min-height: 48px;
+    min-width: 48px;
+}
+
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.content-area {
+    padding-bottom: 100px;
+}
+
+.glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+.dark .glass-panel {
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+#video-preview {
+    width: 100%;
+    max-height: 260px;
+    object-fit: cover;
+    background: #000;
+    border-radius: 0.75rem;
+}
+
+.mirror-video {
+    transform: scaleX(-1);
+}
+
+.rec-pulse {
+    animation: pulse-red 1.5s infinite;
+}
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+#damage-canvas {
+    touch-action: none;
+    background-color: #f8fafc;
+    border-radius: 0.75rem;
+    cursor: crosshair;
+}
+.dark #damage-canvas {
+    background-color: #1e293b;
+}
+
+/* Controle de UI por Perfil de Usuário */
+/* .gerente-only  → visível apenas para GERENTE */
+/* .senior-plus   → visível para GERENTE e LAVADOR_SENIOR */
+body:not(.role-gerente) .gerente-only {
+    display: none !important;
+}
+body.role-lavador .senior-plus {
+    display: none !important;
+}
+
+/* Printable Receipt & Report Styles */
+@media print {
+    html, body {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+    body * {
+        visibility: hidden !important;
+    }
+    #printable-ticket, #printable-ticket * {
+        visibility: visible !important;
+    }
+    #printable-ticket {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-width: 80mm !important;
+        padding: 10px !important;
+        font-family: 'Courier New', Courier, monospace !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+        color: #000000 !important;
+        background-color: #ffffff !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+    }
+}

@@ -1,7 +1,21 @@
-const CACHE_NAME = 'lavacar-pwa-v1';
+const CACHE_NAME = 'lavacar-pwa-v7';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './css/style.css',
+  './js/core.js',
+  './js/auth.js',
+  './js/db.js',
+  './js/navigation.js',
+  './js/wizard.js',
+  './js/media.js',
+  './js/checkin.js',
+  './js/dashboard.js',
+  './js/services.js',
+  './js/clients.js',
+  './js/reports.js',
+  './js/products.js',
+  './js/main.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
   'https://unpkg.com/idb@7/build/umd.js',
