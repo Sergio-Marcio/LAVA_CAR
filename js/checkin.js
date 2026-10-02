@@ -71,79 +71,87 @@ async function saveInspectionRDP() {
     // Apura comissão: taxa fixa por carro + % sobre o valor do serviço
     const comissaoValor = taxaCarro + (valorTotal * comissaoPct / 100);
 
-    const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia'], 'readwrite');
+    try {
+        const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia'], 'readwrite');
 
-    // Cliente
-    let clienteId;
-    const existingClients = await tx.objectStore('clientes').getAll();
-    const foundClient = existingClients.find(c => c.nome.toLowerCase() === cliente.toLowerCase());
-    if (foundClient) {
-        clienteId = foundClient.id;
-    } else {
-        clienteId = await tx.objectStore('clientes').add({
-            nome: cliente,
-            telefone: telefone,
-            criado_em: new Date().toISOString()
-        });
-    }
+        // Cliente
+        let clienteId;
+        const existingClients = await tx.objectStore('clientes').getAll();
+        const foundClient = existingClients.find(c => c.nome.toLowerCase() === cliente.toLowerCase());
+        if (foundClient) {
+            clienteId = foundClient.id;
+        } else {
+            clienteId = await tx.objectStore('clientes').add({
+                nome: cliente,
+                telefone: telefone,
+                criado_em: new Date().toISOString()
+            });
+        }
 
-    // Veículo
-    let veiculoId;
-    const existingVehicles = await tx.objectStore('veiculos').getAll();
-    const foundVehicle = existingVehicles.find(v => v.placa === placa);
-    if (foundVehicle) {
-        veiculoId = foundVehicle.id;
-    } else {
-        veiculoId = await tx.objectStore('veiculos').add({
-            placa: placa,
-            modelo: modelo || 'GERAL',
+        // Veículo
+        let veiculoId;
+        const existingVehicles = await tx.objectStore('veiculos').getAll();
+        const foundVehicle = existingVehicles.find(v => v.placa === placa);
+        if (foundVehicle) {
+            veiculoId = foundVehicle.id;
+        } else {
+            veiculoId = await tx.objectStore('veiculos').add({
+                placa: placa,
+                modelo: modelo || 'GERAL',
+                cliente_id: clienteId,
+                criado_em: new Date().toISOString()
+            });
+        }
+
+        // Processo (Entrada)
+        const processoId = await tx.objectStore('processos').add({
+            sync_id: crypto.randomUUID(),
+            local_revision: 1,
+            veiculo_id: veiculoId,
             cliente_id: clienteId,
-            criado_em: new Date().toISOString()
+            placa: placa,
+            cliente_nome: cliente,
+            modelo: modelo,
+            data_entrada: new Date().toISOString(),
+            data_saida: null,
+            status: 'EM_ANDAMENTO',
+            lavagem: wash ? { id: wash.id, nome: wash.nome, preco: wash.preco } : null,
+            servicos_adicionais: extraDetails,
+            valor_lavagem: wash ? wash.preco : 0,
+            valor_adicionais: valorAdicionais,
+            valor_total: valorTotal,
+            forma_pagamento: null,
+            lavador_id: lavadorId,
+            lavador_nome: lavadorNome,
+            comissao_valor: comissaoValor,
+            checklist: {
+                chave: document.getElementById('chk-chave').checked,
+                portamalas: document.getElementById('chk-portamalas').checked,
+                documentos: document.getElementById('chk-documentos').checked,
+                estepe: document.getElementById('chk-estepe').checked
+            },
+            danos_mapa: damagePoints,
+            observacoes: obs,
+            synced: false
         });
+
+        // Mídias
+        for (const media of currentInspectionMedia) {
+            await tx.objectStore('registros_midia').add({
+                processo_id: processoId,
+                tipo: media.tipo,
+                nome: media.nome,
+                blob: media.blob,
+                criado_em: new Date().toISOString()
+            });
+        }
+
+        await tx.done;
+    } catch (error) {
+        console.error('Erro ao salvar entrada:', error);
+        showToast('Não foi possível guardar a entrada e suas mídias. Libere espaço e tente novamente.', 'error');
+        return;
     }
-
-    // Processo (Entrada)
-    const processoId = await tx.objectStore('processos').add({
-        veiculo_id: veiculoId,
-        cliente_id: clienteId,
-        placa: placa,
-        cliente_nome: cliente,
-        modelo: modelo,
-        data_entrada: new Date().toISOString(),
-        data_saida: null,
-        status: 'EM_ANDAMENTO',
-        lavagem: wash ? { id: wash.id, nome: wash.nome, preco: wash.preco } : null,
-        servicos_adicionais: extraDetails,
-        valor_lavagem: wash ? wash.preco : 0,
-        valor_adicionais: valorAdicionais,
-        valor_total: valorTotal,
-        forma_pagamento: null,
-        lavador_id: lavadorId,
-        lavador_nome: lavadorNome,
-        comissao_valor: comissaoValor,
-        checklist: {
-            chave: document.getElementById('chk-chave').checked,
-            portamalas: document.getElementById('chk-portamalas').checked,
-            documentos: document.getElementById('chk-documentos').checked,
-            estepe: document.getElementById('chk-estepe').checked
-        },
-        danos_mapa: damagePoints,
-        observacoes: obs,
-        synced: false
-    });
-
-    // Mídias
-    for (const media of currentInspectionMedia) {
-        await tx.objectStore('registros_midia').add({
-            processo_id: processoId,
-            tipo: media.tipo,
-            nome: media.nome,
-            url: media.url,
-            criado_em: new Date().toISOString()
-        });
-    }
-
-    await tx.done;
 
     showToast('Entrada do Veículo registrada com sucesso!', 'success');
     resetRdpForm();
@@ -152,6 +160,16 @@ async function saveInspectionRDP() {
 
 function resetRdpForm() {
     document.getElementById('rdp-form').reset();
+    if (isVideoRecording) {
+        mediaRecorder.onstop = null;
+        mediaRecorder.stop();
+        isVideoRecording = false;
+        clearInterval(videoTimerInterval);
+        document.getElementById('btn-video-rec').classList.remove('rec-pulse');
+        document.getElementById('video-rec-lbl').textContent = 'Gravar Vídeo';
+        document.getElementById('rec-timer-overlay').classList.add('hidden');
+    }
+    currentInspectionMedia.forEach(media => URL.revokeObjectURL(media.url));
     currentInspectionMedia = [];
     damagePoints = [];
     selectedWashId = null;
@@ -160,4 +178,3 @@ function resetRdpForm() {
     stopCamera();
     setStep(1);
 }
-

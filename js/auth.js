@@ -201,33 +201,34 @@ async function loadTeam() {
         .order('criado_em', { ascending: true });
 
     if (error) {
-        container.innerHTML = `<p class="text-xs text-rose-500 py-4">Erro ao carregar equipe: ${error.message}</p>`;
+        container.innerHTML = `<p class="text-xs text-rose-500 py-4">Erro ao carregar equipe: ${escapeHTML(error.message)}</p>`;
         return;
     }
 
     container.innerHTML = equipe.map(m => `
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 ${m.ativo === false ? 'opacity-50' : ''}">
             <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 ${m.role === 'GERENTE' ? 'bg-brand-600' : m.role === 'LAVADOR_SENIOR' ? 'bg-amber-500' : 'bg-slate-500'}">
-                ${(m.nome || '?').charAt(0).toUpperCase()}
+                ${escapeHTML((m.nome || '?').charAt(0).toUpperCase())}
             </div>
             <div class="flex-1 min-w-0">
-                <p class="font-bold text-sm text-slate-900 dark:text-white truncate">${m.nome || '(sem nome)'}</p>
-                <p class="text-[11px] text-slate-500 truncate">${m.email || ''}</p>
+                <p class="font-bold text-sm text-slate-900 dark:text-white truncate">${escapeHTML(m.nome || '(sem nome)')}</p>
+                <p class="text-[11px] text-slate-500 truncate">${escapeHTML(m.email || '')}</p>
                 <p class="text-[10px] text-slate-400 mt-0.5">Taxa/carro: <strong class="text-slate-600 dark:text-slate-300">R$ ${(m.taxa_carro || 0).toFixed(2)}</strong> • Comissão: <strong class="text-slate-600 dark:text-slate-300">${(m.comissao_pct || 0).toFixed(1)}%</strong></p>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="editCommission('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}', ${m.taxa_carro || 0}, ${m.comissao_pct || 0})"
+                <button data-id="${escapeHTML(m.id)}" data-nome="${escapeHTML(m.nome || '')}" data-taxa="${escapeHTML(m.taxa_carro || 0)}" data-pct="${escapeHTML(m.comissao_pct || 0)}"
+                    onclick="editCommission(this.dataset.id, this.dataset.nome, Number(this.dataset.taxa), Number(this.dataset.pct))"
                     title="Editar comissão"
                     class="touch-target p-2 rounded-lg text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition">
                     <i data-lucide="badge-percent" class="w-4 h-4"></i>
                 </button>
-                <select onchange="changeTeamRole('${m.id}', this.value)" ${m.id === currentUser.id ? 'disabled' : ''}
+                <select data-id="${escapeHTML(m.id)}" onchange="changeTeamRole(this.dataset.id, this.value)" ${m.id === currentUser.id ? 'disabled' : ''}
                     class="text-xs font-bold px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 outline-none">
                     <option value="GERENTE" ${m.role === 'GERENTE' ? 'selected' : ''}>Gerente</option>
                     <option value="LAVADOR_SENIOR" ${m.role === 'LAVADOR_SENIOR' ? 'selected' : ''}>Lavador Sênior</option>
                     <option value="LAVADOR" ${m.role === 'LAVADOR' ? 'selected' : ''}>Lavador</option>
                 </select>
-                <button onclick="toggleTeamAtivo('${m.id}', ${m.ativo === false})" ${m.id === currentUser.id ? 'disabled' : ''}
+                <button data-id="${escapeHTML(m.id)}" onclick="toggleTeamAtivo(this.dataset.id, ${m.ativo === false})" ${m.id === currentUser.id ? 'disabled' : ''}
                     title="${m.ativo === false ? 'Reativar' : 'Desativar'} usuário"
                     class="touch-target p-2 rounded-lg transition ${m.ativo === false ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40' : 'text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40'} disabled:opacity-30">
                     <i data-lucide="${m.ativo === false ? 'user-check' : 'user-x'}" class="w-4 h-4"></i>
@@ -376,12 +377,15 @@ function renderLavadoresSelect(select, list, currentVal) {
         select.innerHTML = '<option value="">Nenhum lavador disponível</option>';
         return;
     }
-    select.innerHTML = '<option value="">Selecione o lavador...</option>' +
-        list.map(l => {
-            const displayName = l.nome || l.email || 'Lavador';
-            const roleLabel = ROLE_LABELS[l.role] || l.role || 'Lavador';
-            return `<option value="${l.id}" data-taxa="${l.taxa_carro || 0}" data-pct="${l.comissao_pct || 0}">${displayName} (${roleLabel})</option>`;
-        }).join('');
+    select.replaceChildren(new Option('Selecione o lavador...', ''));
+    list.forEach(l => {
+        const displayName = l.nome || l.email || 'Lavador';
+        const roleLabel = ROLE_LABELS[l.role] || l.role || 'Lavador';
+        const option = new Option(`${displayName} (${roleLabel})`, l.id);
+        option.dataset.taxa = l.taxa_carro || 0;
+        option.dataset.pct = l.comissao_pct || 0;
+        select.add(option);
+    });
 
     if (currentVal) select.value = currentVal;
 }

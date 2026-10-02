@@ -69,9 +69,9 @@ async function renderServicesSelectorsInWizard() {
                     <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
                         ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
                     </span>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${s.nome}</h5>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHTML(s.nome)}</h5>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">${s.descricao || ''}</p>
+                <p class="text-xs text-slate-500 mt-1">${escapeHTML(s.descricao || '')}</p>
             </div>
             <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-sm">R$ ${s.preco.toFixed(2)}</span>
         </div>`;
@@ -84,8 +84,8 @@ async function renderServicesSelectorsInWizard() {
             <div class="flex items-center gap-2">
                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
-                    <p class="text-[10px] text-slate-500">${s.descricao || ''}</p>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${escapeHTML(s.nome)}</h5>
+                    <p class="text-[10px] text-slate-500">${escapeHTML(s.descricao || '')}</p>
                 </div>
             </div>
             <span class="font-mono font-bold text-emerald-600 text-xs">R$ ${s.preco.toFixed(2)}</span>
@@ -192,4 +192,3 @@ function clearDamageCanvas() {
     damagePoints = [];
     drawCarDiagram();
 }
-

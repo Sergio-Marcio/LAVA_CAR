@@ -1,4 +1,24 @@
 // --- CAMERA & MEDIA CAPTURE ---
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+const MAX_INSPECTION_MEDIA_BYTES = 50 * 1024 * 1024;
+
+function addInspectionMedia(blob, tipo, nome) {
+    const currentSize = currentInspectionMedia.reduce((sum, media) => sum + media.blob.size, 0);
+    if (!blob || !blob.size || blob.size > MAX_MEDIA_BYTES || currentSize + blob.size > MAX_INSPECTION_MEDIA_BYTES) {
+        showToast('Mídia excede o limite de 20 MB por arquivo ou 50 MB por entrada.', 'error');
+        return false;
+    }
+    currentInspectionMedia.push({
+        id: Date.now() + Math.random(),
+        tipo,
+        url: URL.createObjectURL(blob),
+        blob,
+        nome
+    });
+    renderMediaGallery();
+    return true;
+}
+
 async function startCamera(facingMode) {
     stopCamera();
     const videoEl = document.getElementById('video-preview');
@@ -43,16 +63,9 @@ function takeSnapshot() {
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        currentInspectionMedia.push({
-            id: Date.now(),
-            tipo: 'FOTO',
-            url: url,
-            blob: blob,
-            nome: `Foto_${new Date().toLocaleTimeString().replace(/:/g, '-')}.jpg`
-        });
-        renderMediaGallery();
-        showToast('Foto tirada com sucesso!', 'success');
+        if (addInspectionMedia(blob, 'FOTO', `Foto_${new Date().toLocaleTimeString().replace(/:/g, '-')}.jpg`)) {
+            showToast('Foto tirada com sucesso!', 'success');
+        }
     }, 'image/jpeg', 0.85);
 }
 
@@ -83,17 +96,13 @@ async function toggleVideoRecording() {
             recordedVideoChunks = [];
             mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedVideoChunks.push(e.data); };
             mediaRecorder.onstop = () => {
-                const blob = new Blob(recordedVideoChunks, { type: options.mimeType || 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                currentInspectionMedia.push({
-                    id: Date.now(),
-                    tipo: 'VIDEO',
-                    url: url,
-                    blob: blob,
-                    nome: `Video_${new Date().toLocaleTimeString().replace(/:/g, '-')}.mp4`
-                });
-                renderMediaGallery();
-                showToast('Vídeo salvo!', 'success');
+                const mimeType = mediaRecorder.mimeType || options.mimeType || 'video/webm';
+                const blob = new Blob(recordedVideoChunks, { type: mimeType });
+                recordedVideoChunks = [];
+                const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                if (addInspectionMedia(blob, 'VIDEO', `Video_${new Date().toLocaleTimeString().replace(/:/g, '-')}.${extension}`)) {
+                    showToast('Vídeo salvo!', 'success');
+                }
             };
 
             mediaRecorder.start();
@@ -105,6 +114,7 @@ async function toggleVideoRecording() {
             videoSeconds = 0;
             videoTimerInterval = setInterval(() => {
                 videoSeconds++;
+                if (videoSeconds >= 120) toggleVideoRecording();
                 const m = String(Math.floor(videoSeconds / 60)).padStart(2, '0');
                 const s = String(videoSeconds % 60).padStart(2, '0');
                 document.getElementById('rec-time-display').textContent = `${m}:${s}`;
@@ -126,16 +136,14 @@ function handleFileUpload(evt) {
     const files = evt.target.files;
     if (!files || !files.length) return;
     Array.from(files).forEach(file => {
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+            showToast('Selecione apenas fotos ou vídeos.', 'error');
+            return;
+        }
         const isVideo = file.type.startsWith('video');
-        currentInspectionMedia.push({
-            id: Date.now() + Math.random(),
-            tipo: isVideo ? 'VIDEO' : 'FOTO',
-            url: URL.createObjectURL(file),
-            blob: file,
-            nome: file.name
-        });
+        addInspectionMedia(file, isVideo ? 'VIDEO' : 'FOTO', file.name);
     });
-    renderMediaGallery();
+    evt.target.value = '';
 }
 
 function renderMediaGallery() {
@@ -149,7 +157,7 @@ function renderMediaGallery() {
 
     container.innerHTML = currentInspectionMedia.map((m, idx) => `
         <div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-black aspect-square">
-            ${m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-full object-cover">` : `<video src="${m.url}" class="w-full h-full object-cover"></video>`}
+            ${m.tipo === 'FOTO' ? `<img src="${escapeHTML(m.url)}" class="w-full h-full object-cover">` : `<video src="${escapeHTML(m.url)}" class="w-full h-full object-cover"></video>`}
             <button type="button" onclick="removeMedia(${idx})" class="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full text-xs">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
             </button>
@@ -160,7 +168,8 @@ function renderMediaGallery() {
 }
 
 function removeMedia(idx) {
-    currentInspectionMedia.splice(idx, 1);
+    const [removed] = currentInspectionMedia.splice(idx, 1);
+    if (removed) URL.revokeObjectURL(removed.url);
     renderMediaGallery();
 }
 
@@ -203,4 +212,3 @@ function toggleAudioDictation() {
         interimEl.textContent = '';
     }
 }
-

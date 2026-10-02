@@ -1,4 +1,11 @@
 // --- DASHBOARD RENDER & SAÍDA (CHECKOUT) ---
+let detailsMediaUrls = [];
+
+function releaseDetailsMedia() {
+    detailsMediaUrls.forEach(url => URL.revokeObjectURL(url));
+    detailsMediaUrls = [];
+}
+
 async function loadDashboardData() {
     if (!db) return;
     const tx = db.transaction('processos', 'readonly');
@@ -7,11 +14,10 @@ async function loadDashboardData() {
     const pending = all.filter(p => p.status === 'EM_ANDAMENTO').length;
     const completed = all.filter(p => p.status === 'CONCLUIDO').length;
 
-    // Faturamento Hoje
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayRevenue = all
-        .filter(p => p.status === 'CONCLUIDO' && p.data_saida && p.data_saida.startsWith(todayStr))
-        .reduce((acc, curr) => acc + (curr.valor_total || 0), 0);
+    const todayStr = localDateKey(new Date());
+    const todayRevenue = financialEvents(all)
+        .filter(event => localDateKey(event.date) === todayStr)
+        .reduce((total, event) => total + (event.kind === 'sale' ? event.amount : -event.amount), 0);
 
     document.getElementById('stat-pending').textContent = pending;
     document.getElementById('stat-completed').textContent = completed;
@@ -68,17 +74,17 @@ function renderInspectionList(processos) {
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-brand-500/50 transition">
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex flex-col items-center justify-center text-brand-600 dark:text-brand-400 font-bold font-mono text-xs border border-slate-200 dark:border-slate-700">
-                    <span>${toUpper(p.placa).substring(0, 3)}</span>
-                    <span class="text-[10px] text-slate-400">${toUpper(p.placa).substring(3)}</span>
+                    <span>${escapeHTML(toUpper(p.placa).substring(0, 3))}</span>
+                    <span class="text-[10px] text-slate-400">${escapeHTML(toUpper(p.placa).substring(3))}</span>
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${toUpper(p.placa)}</h4>
+                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${escapeHTML(toUpper(p.placa))}</h4>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
-                            ${statusLabel}
+                            ${escapeHTML(statusLabel)}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-600 dark:text-slate-300">${toUpper(p.cliente_nome)} • <span class="font-semibold text-brand-600">${lavagemNome}</span></p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300">${escapeHTML(toUpper(p.cliente_nome))} • <span class="font-semibold text-brand-600">${escapeHTML(lavagemNome)}</span></p>
                     <p class="text-[10px] text-slate-400 mt-0.5"><i data-lucide="clock" class="w-3 h-3 inline mr-1"></i>Entrada: ${dateEntradaStr}</p>
                 </div>
             </div>
@@ -142,10 +148,12 @@ async function confirmCheckout() {
     const tx = db.transaction('processos', 'readwrite');
     const proc = await tx.store.get(id);
 
-    if (proc) {
+    if (proc && proc.status === 'EM_ANDAMENTO') {
         proc.status = 'CONCLUIDO';
         proc.data_saida = new Date().toISOString();
         proc.forma_pagamento = formaPagamento;
+        proc.local_revision = (proc.local_revision || 0) + 1;
+        proc.synced = false;
         await tx.store.put(proc);
         await tx.done;
 
@@ -161,6 +169,20 @@ async function viewDetails(id) {
     if (!proc) return;
 
     const midias = await db.getAllFromIndex('registros_midia', 'processo_id', id);
+    releaseDetailsMedia();
+    const mediaItems = midias.map(media => {
+        let url;
+        if (media.blob instanceof Blob) {
+            url = URL.createObjectURL(media.blob);
+            detailsMediaUrls.push(url);
+        } else if (media.url && new URL(media.url, window.location.href).protocol === 'https:') {
+            url = media.url;
+        }
+        if (!url) return '<span class="text-xs text-slate-500">Mídia antiga indisponível.</span>';
+        return media.tipo === 'FOTO'
+            ? `<img src="${escapeHTML(url)}" class="w-full h-20 object-cover rounded-lg">`
+            : `<video src="${escapeHTML(url)}" controls class="w-full h-20 bg-black rounded-lg"></video>`;
+    });
 
     const content = document.getElementById('modal-details-content');
     const printEl = document.getElementById('printable-ticket');
@@ -168,13 +190,13 @@ async function viewDetails(id) {
     const entradaStr = new Date(proc.data_entrada).toLocaleString('pt-BR');
     const saidaStr = proc.data_saida ? new Date(proc.data_saida).toLocaleString('pt-BR') : 'Veículo no Pátio';
 
-    const lavagemText = proc.lavagem ? `${proc.lavagem.nome} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
-    const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length ? proc.servicos_adicionais.map(s => `${s.nome} (R$ ${s.preco.toFixed(2)})`).join('<br>') : 'Nenhum';
+    const lavagemText = proc.lavagem ? `${escapeHTML(proc.lavagem.nome)} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
+    const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length ? proc.servicos_adicionais.map(s => `${escapeHTML(s.nome)} (R$ ${s.preco.toFixed(2)})`).join('<br>') : 'Nenhum';
 
     content.innerHTML = `
         <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${toUpper(proc.placa)}</strong></div>
-            <div><span class="text-slate-400">Cliente:</span> <strong>${toUpper(proc.cliente_nome)}</strong></div>
+            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${escapeHTML(toUpper(proc.placa))}</strong></div>
+            <div><span class="text-slate-400">Cliente:</span> <strong>${escapeHTML(toUpper(proc.cliente_nome))}</strong></div>
             <div><span class="text-slate-400">Entrada:</span> ${entradaStr}</div>
             <div><span class="text-slate-400">Saída:</span> ${saidaStr}</div>
         </div>
@@ -201,13 +223,13 @@ async function viewDetails(id) {
 
         <div>
             <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Observações</h5>
-            <p class="text-xs p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">${proc.observacoes || 'Sem observações.'}</p>
+            <p class="text-xs p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">${escapeHTML(proc.observacoes || 'Sem observações.')}</p>
         </div>
 
         <div>
             <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Mídias Vinculadas (${midias.length})</h5>
             <div class="grid grid-cols-3 gap-2">
-                ${midias.map(m => m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-20 object-cover rounded-lg">` : `<video src="${m.url}" controls class="w-full h-20 bg-black rounded-lg"></video>`).join('')}
+                ${mediaItems.join('')}
             </div>
         </div>
     `;
@@ -239,5 +261,5 @@ Obrigado pela preferência!
 
 function closeModalDetails() {
     document.getElementById('modal-details').classList.add('hidden');
+    releaseDetailsMedia();
 }
-

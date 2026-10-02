@@ -46,8 +46,8 @@ function switchTab(tab) {
     if (tab === 'dashboard') loadDashboardData();
     if (tab === 'services') loadServicesTab();
     if (tab === 'reports') {
-        const today = new Date().toISOString().split('T')[0];
-        const thisMonth = new Date().toISOString().substring(0, 7);
+        const today = localDateKey(new Date());
+        const thisMonth = today.substring(0, 7);
         document.getElementById('rep-daily-date').value = today;
         document.getElementById('rep-monthly-month').value = thisMonth;
         switchReportTab(currentReportTab);
@@ -73,4 +73,3 @@ if (localStorage.getItem('lavacar_theme') === 'dark' || (!('lavacar_theme' in lo
     document.getElementById('icon-sun').classList.remove('hidden');
     document.getElementById('icon-moon').classList.add('hidden');
 }
-

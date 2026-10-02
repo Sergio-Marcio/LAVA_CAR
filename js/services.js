@@ -20,9 +20,9 @@ async function loadServicesTab() {
                     <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
                         ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
                     </span>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${s.nome}</h5>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${escapeHTML(s.nome)}</h5>
                 </div>
-                <p class="text-[11px] text-slate-500 mt-1">${s.descricao || 'Sem descrição'}</p>
+                <p class="text-[11px] text-slate-500 mt-1">${escapeHTML(s.descricao || 'Sem descrição')}</p>
             </div>
             <div class="flex items-center gap-2">
                 <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-xs sm:text-sm whitespace-nowrap">R$ ${s.preco.toFixed(2)}</span>
@@ -39,8 +39,8 @@ async function loadServicesTab() {
             <div onclick="toggleSimExtra(${s.id})" class="flex-1 cursor-pointer flex items-center gap-2">
                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
-                    <p class="text-[10px] text-slate-500">${s.descricao || 'Sem descrição'}</p>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${escapeHTML(s.nome)}</h5>
+                    <p class="text-[10px] text-slate-500">${escapeHTML(s.descricao || 'Sem descrição')}</p>
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -163,4 +163,3 @@ async function deleteService(id) {
         loadServicesTab();
     }
 }
-
