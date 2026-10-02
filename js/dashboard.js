@@ -68,17 +68,17 @@ function renderInspectionList(processos) {
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-brand-500/50 transition">
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex flex-col items-center justify-center text-brand-600 dark:text-brand-400 font-bold font-mono text-xs border border-slate-200 dark:border-slate-700">
-                    <span>${p.placa.substring(0, 3)}</span>
-                    <span class="text-[10px] text-slate-400">${p.placa.substring(3)}</span>
+                    <span>${toUpper(p.placa).substring(0, 3)}</span>
+                    <span class="text-[10px] text-slate-400">${toUpper(p.placa).substring(3)}</span>
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${p.placa}</h4>
+                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${toUpper(p.placa)}</h4>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
                             ${statusLabel}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-600 dark:text-slate-300">${p.cliente_nome} • <span class="font-semibold text-brand-600">${lavagemNome}</span></p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300">${toUpper(p.cliente_nome)} • <span class="font-semibold text-brand-600">${lavagemNome}</span></p>
                     <p class="text-[10px] text-slate-400 mt-0.5"><i data-lucide="clock" class="w-3 h-3 inline mr-1"></i>Entrada: ${dateEntradaStr}</p>
                 </div>
             </div>
@@ -117,8 +117,8 @@ async function openModalCheckout(id) {
     if (!proc) return;
 
     document.getElementById('co-processo-id').value = proc.id;
-    document.getElementById('co-placa').textContent = proc.placa;
-    document.getElementById('co-cliente').textContent = proc.cliente_nome;
+    document.getElementById('co-placa').textContent = toUpper(proc.placa);
+    document.getElementById('co-cliente').textContent = toUpper(proc.cliente_nome);
     document.getElementById('co-entrada').textContent = new Date(proc.data_entrada).toLocaleString('pt-BR');
 
     const servs = [];
@@ -150,7 +150,7 @@ async function confirmCheckout() {
         await tx.done;
 
         closeModalCheckout();
-        showToast(`Saída do veículo ${proc.placa} registrada! Pagamento em ${formaPagamento}`, 'success');
+        showToast(`Saída do veículo ${toUpper(proc.placa)} registrada! Pagamento em ${formaPagamento}`, 'success');
         loadDashboardData();
     }
 }
@@ -173,8 +173,8 @@ async function viewDetails(id) {
 
     content.innerHTML = `
         <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${proc.placa}</strong></div>
-            <div><span class="text-slate-400">Cliente:</span> <strong>${proc.cliente_nome}</strong></div>
+            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${toUpper(proc.placa)}</strong></div>
+            <div><span class="text-slate-400">Cliente:</span> <strong>${toUpper(proc.cliente_nome)}</strong></div>
             <div><span class="text-slate-400">Entrada:</span> ${entradaStr}</div>
             <div><span class="text-slate-400">Saída:</span> ${saidaStr}</div>
         </div>
@@ -219,8 +219,8 @@ LAVA_CAR PRO RDP
 ===================================
 COMPROVANTE DE SERVIÇOS
 -----------------------------------
-PLACA  : ${proc.placa}
-CLIENTE: ${proc.cliente_nome}
+PLACA  : ${toUpper(proc.placa)}
+CLIENTE: ${toUpper(proc.cliente_nome)}
 ENTRADA: ${entradaStr}
 SAIDA  : ${saidaStr}
 -----------------------------------
