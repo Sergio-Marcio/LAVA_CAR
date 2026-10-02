@@ -14,6 +14,11 @@ let selectedExtraIds = new Set();
 let simSelectedWashId = null;
 let simSelectedExtraIds = new Set();
 
+// --- FORMATTING ---
+function toUpper(value) {
+    return (value ?? '').toString().toLocaleUpperCase('pt-BR');
+}
+
 // --- TOAST NOTIFICATIONS ---
 function showToast(msg, type = 'info') {
     const toast = document.getElementById('toast');
