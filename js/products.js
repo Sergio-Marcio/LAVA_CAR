@@ -13,7 +13,7 @@ async function loadProductsList() {
     }
 
     grid.innerHTML = products.map(p => {
-        const perc = p.percentual !== undefined ? p.percentual : (p.nivel === 'CHEIO' ? 90 : p.nivel === 'MEIO' ? 50 : 20);
+        const perc = Math.max(0, Math.min(100, Number(p.percentual !== undefined ? p.percentual : (p.nivel === 'CHEIO' ? 90 : p.nivel === 'MEIO' ? 50 : 20)) || 0));
         
         let levelColor = 'bg-emerald-500';
         let badgeStyle = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
@@ -34,8 +34,8 @@ async function loadProductsList() {
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
             <div class="flex items-start justify-between">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${p.nome}</h5>
-                    <p class="text-xs text-slate-500">${p.descricao || 'Sem descrição'}</p>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHTML(p.nome)}</h5>
+                    <p class="text-xs text-slate-500">${escapeHTML(p.descricao || 'Sem descrição')}</p>
                     <span class="font-mono font-extrabold text-brand-600 text-xs mt-1 block">R$ ${p.valor.toFixed(2)}</span>
                 </div>
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${badgeStyle}">

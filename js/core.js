@@ -19,6 +19,11 @@ function toUpper(value) {
     return (value ?? '').toString().toLocaleUpperCase('pt-BR');
 }
 
+function escapeHTML(value) {
+    const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(value ?? '').replace(/[&<>"']/g, char => entities[char]);
+}
+
 // --- TOAST NOTIFICATIONS ---
 function showToast(msg, type = 'info') {
     const toast = document.getElementById('toast');
@@ -57,4 +62,3 @@ let isAudioRecording = false;
 
 let currentInspectionMedia = [];
 let damagePoints = [];
-

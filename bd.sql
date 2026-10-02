@@ -43,6 +43,7 @@ CREATE TABLE produtos (
 -- Tabela de Processos / Ordens de Serviço (Entrada, Saída e Estorno)
 CREATE TABLE processos (
     id SERIAL PRIMARY KEY,
+    sync_id UUID UNIQUE,
     veiculo_id INTEGER REFERENCES veiculos(id),
     cliente_id INTEGER REFERENCES clientes(id),
     data_entrada TIMESTAMP DEFAULT NOW(),

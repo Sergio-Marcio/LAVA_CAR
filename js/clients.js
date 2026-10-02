@@ -11,11 +11,11 @@ async function loadClientsData() {
     container.innerHTML = clients.map(c => `
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3">
             <div class="w-10 h-10 bg-brand-100 dark:bg-brand-900/50 rounded-xl flex items-center justify-center text-brand-600 font-bold">
-                ${toUpper(c.nome).charAt(0)}
+                ${escapeHTML(toUpper(c.nome).charAt(0))}
             </div>
             <div>
-                <h4 class="font-bold text-slate-900 dark:text-white text-sm">${toUpper(c.nome)}</h4>
-                <p class="text-xs text-slate-500">${c.telefone || 'Sem telefone'}</p>
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHTML(toUpper(c.nome))}</h4>
+                <p class="text-xs text-slate-500">${escapeHTML(c.telefone || 'Sem telefone')}</p>
             </div>
         </div>
     `).join('');
@@ -52,7 +52,11 @@ async function loadSeedData() {
 }
 
 // --- SUPABASE SYNC (usa sessão autenticada de js/auth.js) ---
+let syncInProgress = false;
+
 async function triggerManualSync() {
+    if (syncInProgress) return;
+    syncInProgress = true;
     showToast('Sincronizando com nuvem...', 'info');
 
     try {
@@ -70,8 +74,28 @@ async function triggerManualSync() {
             return;
         }
 
-        // Mapeia o formato local (IndexedDB) para as colunas do Supabase
+        for (const p of pendentes) {
+            if (p.sync_id) continue;
+            const { data: existing, error } = await sbClient.from('processos')
+                .select('id, sync_id')
+                .eq('placa', p.placa)
+                .eq('data_entrada', p.data_entrada);
+            if (error) throw error;
+            if (existing.length > 1) throw new Error(`Ordem ${p.placa} duplicada na nuvem; revise antes de sincronizar.`);
+            p.sync_id = existing.length ? (existing[0].sync_id || crypto.randomUUID()) : crypto.randomUUID();
+            if (existing.length && !existing[0].sync_id) {
+                const { data: updated, error: updateError } = await sbClient.from('processos')
+                    .update({ sync_id: p.sync_id }).eq('id', existing[0].id).select('id').single();
+                if (updateError) throw updateError;
+                if (!updated) throw new Error('Não foi possível identificar a ordem antiga na nuvem.');
+            }
+            const current = await db.get('processos', p.id);
+            current.sync_id = p.sync_id;
+            await db.put('processos', current);
+        }
+
         const payload = pendentes.map(p => ({
+            sync_id: p.sync_id,
             placa: p.placa,
             cliente_nome: p.cliente_nome,
             modelo: p.modelo || null,
@@ -97,14 +121,17 @@ async function triggerManualSync() {
             synced: true
         }));
 
-        const { error } = await sbClient.from('processos').insert(payload);
+        const { error } = await sbClient.from('processos').upsert(payload, { onConflict: 'sync_id' });
         if (error) throw new Error(error.message);
 
         // Marca como sincronizado no IndexedDB
         const tx = db.transaction('processos', 'readwrite');
         for (const p of pendentes) {
-            p.synced = true;
-            await tx.store.put(p);
+            const current = await tx.store.get(p.id);
+            if (current && (current.local_revision || 0) === (p.local_revision || 0)) {
+                current.synced = true;
+                await tx.store.put(current);
+            }
         }
         await tx.done;
 
@@ -113,6 +140,8 @@ async function triggerManualSync() {
     } catch (err) {
         console.error('Sync error:', err);
         showToast('Falha na sincronização: ' + err.message, 'error');
+    } finally {
+        syncInProgress = false;
     }
 }
 
@@ -154,7 +183,7 @@ async function openModalRefund(id) {
     document.getElementById('ref-placa').textContent = toUpper(proc.placa);
     document.getElementById('ref-cliente').textContent = toUpper(proc.cliente_nome);
     document.getElementById('ref-valor-orig').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
-    document.getElementById('ref-valor').value = (proc.valor_total || 0).toFixed(2);
+    document.getElementById('ref-valor').value = proc.data_saida ? (proc.valor_total || 0).toFixed(2) : '0.00';
     document.getElementById('ref-motivo').value = '';
 
     document.getElementById('modal-refund').classList.remove('hidden');
@@ -169,16 +198,26 @@ async function confirmRefundService() {
     const motivo = document.getElementById('ref-motivo').value.trim();
     const valorEstorno = parseFloat(document.getElementById('ref-valor').value);
 
-    if (!id || !motivo || isNaN(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
+    if (!id || !motivo || !Number.isFinite(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
 
     const tx = db.transaction('processos', 'readwrite');
     const proc = await tx.store.get(id);
 
     if (proc) {
+        if (proc.status === 'CANCELADO' || (proc.status !== 'CONCLUIDO' && proc.status !== 'EM_ANDAMENTO')) {
+            await tx.done;
+            return showToast('Esta ordem não pode ser estornada.', 'error');
+        }
+        if (proc.data_saida ? valorEstorno <= 0 || valorEstorno > proc.valor_total : valorEstorno !== 0) {
+            await tx.done;
+            return showToast('Valor do estorno inválido para esta ordem.', 'error');
+        }
         proc.status = 'CANCELADO';
         proc.data_estorno = new Date().toISOString();
         proc.motivo_estorno = motivo;
         proc.valor_estornado = valorEstorno;
+        proc.local_revision = (proc.local_revision || 0) + 1;
+        proc.synced = false;
         await tx.store.put(proc);
         await tx.done;
 
@@ -188,4 +227,3 @@ async function confirmRefundService() {
         if (currentTab === 'reports') loadDailyReport();
     }
 }
-
