@@ -50,6 +50,7 @@ function switchTab(tab) {
         const thisMonth = today.substring(0, 7);
         document.getElementById('rep-daily-date').value = today;
         document.getElementById('rep-monthly-month').value = thisMonth;
+        document.getElementById('rep-comm-month').value = thisMonth;
         switchReportTab(currentReportTab);
     }
     if (tab === 'clients') loadClientsData();
