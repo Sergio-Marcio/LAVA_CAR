@@ -553,9 +553,29 @@
 
         <!-- ==================== VIEW 4: CLIENTES & VEÍCULOS ==================== -->
         <section id="view-clients" class="hidden space-y-6">
-            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <i data-lucide="users" class="w-5 h-5 text-brand-500"></i> Clientes e Veículos Cadastrados
-            </h3>
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-brand-500"></i> Clientes e Veículos Cadastrados
+                    </h3>
+                    <p class="text-xs text-slate-500">Histórico de clientes, contatos, veículos cadastrados e total de lavagens.</p>
+                </div>
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <button onclick="openModalClient()" class="touch-target px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i> Novo Cliente
+                    </button>
+                    <button onclick="syncClientsFromProcessos(true)" title="Reconciliar clientes a partir das ordens de serviço e histórico" class="touch-target px-3 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sincronizar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Busca de clientes -->
+            <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
+                <input type="text" id="search-clients-input" onkeyup="filterClientsList()" placeholder="Buscar cliente por nome, telefone ou placa do veículo..." class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none">
+            </div>
+
             <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Rendered dynamically -->
             </div>
@@ -1049,6 +1069,47 @@
                 <div class="pt-3 border-t flex justify-end gap-2">
                     <button type="button" onclick="closeModalProduct()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
                     <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar Produto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CADASTRAR / EDITAR CLIENTE -->
+    <div id="modal-client" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 id="client-modal-title" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="user-plus" class="w-5 h-5 text-brand-500"></i> Cadastrar Novo Cliente
+                </h3>
+                <button type="button" onclick="closeModalClient()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <form onsubmit="event.preventDefault(); saveClient();" class="space-y-3">
+                <input type="hidden" id="client-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome Completo do Cliente *</label>
+                    <input type="text" id="client-nome" required placeholder="Ex: JOÃO SILVA" class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Telefone / WhatsApp</label>
+                    <input type="text" id="client-telefone" placeholder="(11) 98888-7777" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Placa do Veículo</label>
+                        <input type="text" id="client-placa" placeholder="ABC-1234" class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono uppercase outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Modelo do Carro</label>
+                        <input type="text" id="client-modelo" placeholder="Ex: Onix, Hilux..." class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalClient()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar Cliente</button>
                 </div>
             </form>
         </div>

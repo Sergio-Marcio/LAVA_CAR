@@ -1,28 +1,393 @@
 // --- CLIENTS & SEED & UTILS ---
-async function loadClientsData() {
-    const clients = await db.getAll('clientes');
-    const container = document.getElementById('clients-list');
+let cachedClientsList = [];
 
-    if (!clients || clients.length === 0) {
-        container.innerHTML = `<p class="col-span-full text-center text-xs text-slate-400 py-8">Nenhum cliente cadastrado.</p>`;
+// Reconcilia e sincroniza clientes e veículos a partir dos processos (ordens de serviço) existentes
+async function syncClientsFromProcessos(notifyUser = false) {
+    if (!db) return 0;
+    try {
+        const processos = await db.getAll('processos');
+        if (!processos || processos.length === 0) {
+            if (notifyUser) showToast('Nenhuma ordem de serviço encontrada no histórico.', 'info');
+            return 0;
+        }
+
+        const tx = db.transaction(['clientes', 'veiculos'], 'readwrite');
+        const cStore = tx.objectStore('clientes');
+        const vStore = tx.objectStore('veiculos');
+
+        const existingClients = await cStore.getAll();
+        const clientByName = new Map();
+        existingClients.forEach(c => {
+            if (c.nome) clientByName.set(c.nome.trim().toUpperCase(), c);
+        });
+
+        const existingVehicles = await vStore.getAll();
+        const vehicleByPlate = new Map();
+        existingVehicles.forEach(v => {
+            if (v.placa) vehicleByPlate.set(v.placa.trim().toUpperCase(), v);
+        });
+
+        let novosClientes = 0;
+        for (const p of processos) {
+            const rawNome = (p.cliente_nome || '').trim();
+            if (!rawNome) continue;
+            const normNome = rawNome.toUpperCase();
+
+            let client = clientByName.get(normNome);
+            if (!client) {
+                const newId = await cStore.add({
+                    nome: rawNome,
+                    telefone: p.telefone || '',
+                    criado_em: p.data_entrada || new Date().toISOString()
+                });
+                client = { id: newId, nome: rawNome, telefone: p.telefone || '' };
+                clientByName.set(normNome, client);
+                novosClientes++;
+            }
+
+            const rawPlaca = (p.placa || '').trim().toUpperCase();
+            if (rawPlaca && !vehicleByPlate.has(rawPlaca)) {
+                try {
+                    const newVId = await vStore.add({
+                        placa: rawPlaca,
+                        modelo: p.modelo || 'GERAL',
+                        cliente_id: client.id,
+                        criado_em: p.data_entrada || new Date().toISOString()
+                    });
+                    vehicleByPlate.set(rawPlaca, { id: newVId, placa: rawPlaca, modelo: p.modelo, cliente_id: client.id });
+                } catch (_) {}
+            }
+        }
+
+        await tx.done;
+        if (notifyUser) {
+            if (novosClientes > 0) {
+                showToast(`${novosClientes} cliente(s) importados das ordens de serviço!`, 'success');
+            } else {
+                showToast('Todos os clientes das ordens de serviço já estão sincronizados.', 'info');
+            }
+            await loadClientsData();
+        }
+        return novosClientes;
+    } catch (e) {
+        console.warn('Erro ao reconciliar clientes de processos:', e);
+        if (notifyUser) showToast('Erro ao sincronizar clientes.', 'error');
+        return 0;
+    }
+}
+
+async function loadClientsData() {
+    const container = document.getElementById('clients-list');
+    if (!container) return;
+
+    if (!db) {
+        container.innerHTML = `<p class="col-span-full text-center text-xs text-slate-400 py-8">Iniciando banco de dados...</p>`;
         return;
     }
 
-    container.innerHTML = clients.map(c => {
-        const nomeSafe = escapeHtml(toUpper(c.nome));
-        const telSafe = escapeHtml(c.telefone || 'Sem telefone');
-        return `
-        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3">
-            <div class="w-10 h-10 bg-brand-100 dark:bg-brand-900/50 rounded-xl flex items-center justify-center text-brand-600 font-bold">
-                ${nomeSafe.charAt(0).toUpperCase()}
+    // Auto-reconcilia clientes de ordens de serviço caso o banco de clientes esteja vazio
+    let clients = await db.getAll('clientes');
+    if (!clients || clients.length === 0) {
+        await syncClientsFromProcessos(false);
+        clients = await db.getAll('clientes');
+    }
+
+    if (!clients || clients.length === 0) {
+        cachedClientsList = [];
+        container.innerHTML = `
+            <div class="col-span-full bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-4">
+                <div class="w-16 h-16 bg-brand-50 dark:bg-brand-950/50 rounded-2xl flex items-center justify-center text-brand-600 dark:text-brand-400 mx-auto text-2xl font-bold">
+                    <i data-lucide="users" class="w-8 h-8"></i>
+                </div>
+                <div class="max-w-md mx-auto">
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Nenhum cliente cadastrado ainda</h4>
+                    <p class="text-xs text-slate-500 mt-1">Cadastre novos clientes para facilitar o registro de lavagens, ou carregue dados de demonstração para testar.</p>
+                </div>
+                <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button onclick="openModalClient()" class="touch-target px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i> Cadastrar Primeiro Cliente
+                    </button>
+                    <button onclick="loadSeedData()" class="touch-target px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl flex items-center gap-2 border border-slate-200 dark:border-slate-700 transition">
+                        <i data-lucide="database" class="w-4 h-4"></i> Carregar Clientes de Exemplo
+                    </button>
+                </div>
             </div>
-            <div>
-                <h4 class="font-bold text-slate-900 dark:text-white text-sm">${nomeSafe}</h4>
-                <p class="text-xs text-slate-500">${telSafe}</p>
+        `;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return;
+    }
+
+    // Busca veículos e processos para enriquecer os dados dos clientes
+    const [veiculos, processos] = await Promise.all([
+        db.getAll('veiculos').catch(() => []),
+        db.getAll('processos').catch(() => [])
+    ]);
+
+    const vehiclesByClientId = new Map();
+    (veiculos || []).forEach(v => {
+        if (v.cliente_id) {
+            if (!vehiclesByClientId.has(v.cliente_id)) vehiclesByClientId.set(v.cliente_id, []);
+            vehiclesByClientId.get(v.cliente_id).push(v);
+        }
+    });
+
+    // Mapeia atendimentos por cliente
+    const countByClient = new Map();
+    const lastVisitByClient = new Map();
+    (processos || []).forEach(p => {
+        const norm = (p.cliente_nome || '').trim().toUpperCase();
+        if (norm) {
+            countByClient.set(norm, (countByClient.get(norm) || 0) + 1);
+            if (p.data_entrada) {
+                const prev = lastVisitByClient.get(norm);
+                if (!prev || new Date(p.data_entrada) > new Date(prev)) {
+                    lastVisitByClient.set(norm, p.data_entrada);
+                }
+            }
+        }
+    });
+
+    cachedClientsList = clients.map(c => {
+        const normNome = (c.nome || '').trim().toUpperCase();
+        let clientVehicles = vehiclesByClientId.get(c.id) || [];
+        // Se não tiver veículo vinculado por ID, tenta buscar por processos com mesmo nome
+        if (clientVehicles.length === 0) {
+            const platesFound = new Set();
+            (processos || []).forEach(p => {
+                if ((p.cliente_nome || '').trim().toUpperCase() === normNome && p.placa && !platesFound.has(p.placa)) {
+                    platesFound.add(p.placa);
+                    clientVehicles.push({ placa: p.placa, modelo: p.modelo || 'GERAL' });
+                }
+            });
+        }
+        return {
+            ...c,
+            vehicles: clientVehicles,
+            totalVisitas: countByClient.get(normNome) || 0,
+            ultimaVisita: lastVisitByClient.get(normNome) || null
+        };
+    });
+
+    renderClientsHtml(cachedClientsList);
+}
+
+function renderClientsHtml(list) {
+    const container = document.getElementById('clients-list');
+    if (!container) return;
+
+    if (!list || list.length === 0) {
+        container.innerHTML = `<p class="col-span-full text-center text-xs text-slate-400 py-8">Nenhum cliente encontrado com os termos pesquisados.</p>`;
+        return;
+    }
+
+    container.innerHTML = list.map(c => {
+        const nomeSafe = escapeHtml(toUpper(c.nome));
+        const telVal = (c.telefone || '').trim();
+        const telSafe = escapeHtml(telVal || 'Sem telefone');
+        const telDigits = telVal.replace(/\D/g, '');
+        const hasTel = telDigits.length >= 8;
+        const totalVisitas = c.totalVisitas || 0;
+
+        const vehiclesHtml = (c.vehicles && c.vehicles.length > 0)
+            ? c.vehicles.map(v => `
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700">
+                    <i data-lucide="car" class="w-3 h-3 text-brand-500"></i>
+                    <strong class="font-mono text-brand-600 dark:text-brand-400">${escapeHtml(toUpper(v.placa))}</strong>
+                    ${v.modelo ? `<span class="text-slate-400 text-[10px]">(${escapeHtml(toUpper(v.modelo))})</span>` : ''}
+                </span>
+            `).join('')
+            : `<span class="text-[11px] text-slate-400 italic">Nenhum veículo vinculado</span>`;
+
+        const firstVehiclePlate = (c.vehicles && c.vehicles.length > 0) ? c.vehicles[0].placa : '';
+
+        return `
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-brand-500/40 transition flex flex-col justify-between gap-4">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 bg-brand-50 dark:bg-brand-950/60 rounded-2xl flex items-center justify-center text-brand-600 dark:text-brand-400 font-extrabold text-base border border-brand-100 dark:border-brand-900/40">
+                        ${nomeSafe.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-slate-900 dark:text-white text-sm tracking-wide flex items-center gap-2">
+                            ${nomeSafe}
+                        </h4>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            ${hasTel ? `
+                                <a href="https://wa.me/55${telDigits}" target="_blank" title="Enviar WhatsApp" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1">
+                                    <i data-lucide="phone" class="w-3 h-3"></i> ${telSafe}
+                                </a>
+                            ` : `
+                                <span class="text-xs text-slate-400 flex items-center gap-1">
+                                    <i data-lucide="phone-off" class="w-3 h-3"></i> ${telSafe}
+                                </span>
+                            `}
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-brand-300 text-[11px] font-bold rounded-full border border-brand-200/50 dark:border-brand-800/50">
+                        <i data-lucide="sparkles" class="w-3 h-3"></i> ${totalVisitas} ${totalVisitas === 1 ? 'lavagem' : 'lavagens'}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Veículos Vinculados -->
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1">
+                    <i data-lucide="tag" class="w-3 h-3"></i> Veículo(s) do Cliente:
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                    ${vehiclesHtml}
+                </div>
+            </div>
+
+            <!-- Ações Rápidas -->
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                <button type="button" onclick="quickStartRdpForClient('${escapeHtml(c.nome)}', '${escapeHtml(firstVehiclePlate)}', '${escapeHtml(telVal)}')" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-500 flex items-center gap-1 transition">
+                    <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Nova RDP
+                </button>
+                <button type="button" onclick="deleteClient(${c.id}, '${escapeHtml(c.nome)}')" title="Excluir Cliente" class="text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg transition">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
             </div>
         </div>
-    `;
+        `;
     }).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function filterClientsList() {
+    const input = document.getElementById('search-clients-input');
+    const term = (input ? input.value : '').trim().toLowerCase();
+
+    if (!term) {
+        renderClientsHtml(cachedClientsList);
+        return;
+    }
+
+    const filtered = cachedClientsList.filter(c => {
+        const nomeMatch = (c.nome || '').toLowerCase().includes(term);
+        const telMatch = (c.telefone || '').toLowerCase().includes(term);
+        const vehicleMatch = (c.vehicles || []).some(v => 
+            (v.placa || '').toLowerCase().includes(term) || (v.modelo || '').toLowerCase().includes(term)
+        );
+        return nomeMatch || telMatch || vehicleMatch;
+    });
+
+    renderClientsHtml(filtered);
+}
+
+function openModalClient() {
+    const modal = document.getElementById('modal-client');
+    if (!modal) return;
+    document.getElementById('client-id').value = '';
+    document.getElementById('client-nome').value = '';
+    document.getElementById('client-telefone').value = '';
+    document.getElementById('client-placa').value = '';
+    document.getElementById('client-modelo').value = '';
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        const inp = document.getElementById('client-nome');
+        if (inp) inp.focus();
+    }, 100);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function closeModalClient() {
+    const modal = document.getElementById('modal-client');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function saveClient() {
+    const nome = toUpper(document.getElementById('client-nome').value.trim());
+    const tel = document.getElementById('client-telefone').value.trim();
+    const placa = (document.getElementById('client-placa').value || '').trim().toUpperCase();
+    const modelo = toUpper(document.getElementById('client-modelo').value.trim());
+
+    if (!nome) {
+        showToast('Informe o nome do cliente', 'error');
+        return;
+    }
+
+    try {
+        const tx = db.transaction(['clientes', 'veiculos'], 'readwrite');
+        const cStore = tx.objectStore('clientes');
+        const vStore = tx.objectStore('veiculos');
+
+        // Verifica se cliente já existe
+        const existing = await cStore.getAll();
+        let client = existing.find(c => (c.nome || '').trim().toUpperCase() === nome);
+        let clienteId;
+
+        if (client) {
+            clienteId = client.id;
+            if (tel) {
+                client.telefone = tel;
+                await cStore.put(client);
+            }
+        } else {
+            clienteId = await cStore.add({
+                nome: nome,
+                telefone: tel,
+                criado_em: new Date().toISOString()
+            });
+        }
+
+        // Se informou placa, cadastra o veículo vinculado
+        if (placa) {
+            let foundV = null;
+            try {
+                foundV = await vStore.index('placa').get(placa);
+            } catch (_) {}
+
+            if (!foundV) {
+                await vStore.add({
+                    placa: placa,
+                    modelo: modelo || 'GERAL',
+                    cliente_id: clienteId,
+                    criado_em: new Date().toISOString()
+                });
+            }
+        }
+
+        await tx.done;
+        closeModalClient();
+        showToast(`Cliente "${nome}" salvo com sucesso!`, 'success');
+        await loadClientsData();
+    } catch (e) {
+        console.error('Erro ao salvar cliente:', e);
+        showToast('Erro ao salvar cliente: ' + (e.message || String(e)), 'error');
+    }
+}
+
+async function deleteClient(id, nome) {
+    if (!id) return;
+    if (!confirm(`Deseja realmente remover o cliente "${nome}" do cadastro?`)) return;
+
+    try {
+        const tx = db.transaction('clientes', 'readwrite');
+        await tx.store.delete(id);
+        await tx.done;
+        showToast(`Cliente removido.`, 'info');
+        await loadClientsData();
+    } catch (e) {
+        console.error('Erro ao remover cliente:', e);
+        showToast('Erro ao remover cliente.', 'error');
+    }
+}
+
+function quickStartRdpForClient(nome, placa, tel) {
+    switchTab('new');
+    setTimeout(() => {
+        const inpCliente = document.getElementById('inp-cliente');
+        const inpPlaca = document.getElementById('inp-placa');
+        const inpTel = document.getElementById('inp-telefone');
+        if (inpCliente) inpCliente.value = nome || '';
+        if (inpPlaca && placa) inpPlaca.value = placa || '';
+        if (inpTel && tel) inpTel.value = tel || '';
+        showToast(`Dados de ${nome} preenchidos na Nova RDP!`, 'info');
+    }, 150);
 }
 
 async function loadSeedData() {
@@ -53,6 +418,7 @@ async function loadSeedData() {
     await tx.done;
     showToast('Dados demonstrativos carregados!', 'success');
     loadDashboardData();
+    if (typeof loadClientsData === 'function') loadClientsData();
 }
 
 // --- SUPABASE SYNC (usa sessão autenticada de js/auth.js) ---
@@ -528,7 +894,11 @@ async function triggerManualSync(opts) {
         loadDashboardData();
         try {
             const r = await pullCloudProcessos();
-            if (r.merged) loadDashboardData();
+            if (r.merged) {
+                loadDashboardData();
+                try { await syncClientsFromProcessos(false); } catch (_) {}
+                if (typeof currentTab !== 'undefined' && currentTab === 'clients') loadClientsData();
+            }
         } catch (e) {
             console.warn('Pull da nuvem falhou:', e);
         }
@@ -732,6 +1102,8 @@ async function refreshFromCloud(opts) {
         const r = await pullCloudProcessos({ forceFull });
         const rm = await pullCloudMidias({ forceFull });
         loadDashboardData();
+        try { await syncClientsFromProcessos(false); } catch (_) {}
+        if (typeof currentTab !== 'undefined' && currentTab === 'clients') loadClientsData();
 
         try { localStorage.setItem('lavacar_ultima_sincronia', new Date().toISOString()); } catch (_) {}
         try { _atualizarBadgeSincronia(); } catch (_) {}
@@ -755,7 +1127,11 @@ async function autoPullFromCloud() {
         if (typeof isGerente === 'function' && !isGerente()) return;
         const r = await pullCloudProcessos();
         await pullCloudMidias();
-        if (r.merged) loadDashboardData();
+        if (r.merged) {
+            loadDashboardData();
+            try { await syncClientsFromProcessos(false); } catch (_) {}
+            if (typeof currentTab !== 'undefined' && currentTab === 'clients') loadClientsData();
+        }
     } catch (e) {
         console.warn('Auto pull falhou:', e);
     }
