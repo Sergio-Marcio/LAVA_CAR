@@ -58,9 +58,9 @@ function renderInspectionList(processos) {
         const lavagemNome = p.lavagem ? p.lavagem.nome : 'Sem lavagem';
         const totalFormatted = (p.valor_total || 0).toFixed(2);
 
-        const placaSafe = typeof escapeHtml === 'function' ? escapeHtml(p.placa) : String(p.placa || '');
-        const clienteSafe = typeof escapeHtml === 'function' ? escapeHtml(p.cliente_nome) : String(p.cliente_nome || '');
-        const lavagemSafe = typeof escapeHtml === 'function' ? escapeHtml(lavagemNome) : String(lavagemNome || '');
+        const placaSafe = escapeHtml(toUpper(p.placa));
+        const clienteSafe = escapeHtml(toUpper(p.cliente_nome));
+        const lavagemSafe = escapeHtml(lavagemNome);
 
         let badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
         let statusLabel = 'NO PÁTIO (EM ANDAMENTO)';
@@ -125,8 +125,8 @@ async function openModalCheckout(id) {
     if (!proc) return;
 
     document.getElementById('co-processo-id').value = proc.id;
-    document.getElementById('co-placa').textContent = proc.placa;
-    document.getElementById('co-cliente').textContent = proc.cliente_nome;
+    document.getElementById('co-placa').textContent = toUpper(proc.placa);
+    document.getElementById('co-cliente').textContent = toUpper(proc.cliente_nome);
     document.getElementById('co-entrada').textContent = new Date(proc.data_entrada).toLocaleString('pt-BR');
 
     const servs = [];
@@ -159,7 +159,7 @@ async function confirmCheckout() {
         await tx.done;
 
         closeModalCheckout();
-        showToast(`Saída do veículo ${proc.placa} registrada! Pagamento em ${formaPagamento}`, 'success');
+        showToast(`Saída do veículo ${toUpper(proc.placa)} registrada! Pagamento em ${formaPagamento}`, 'success');
         loadDashboardData();
     }
 }
@@ -212,8 +212,8 @@ async function viewDetails(id) {
         "'": '&#39;'
     }[ch]));
 
-    const placaSafe = esc(proc.placa);
-    const clienteSafe = esc(proc.cliente_nome);
+    const placaSafe = esc(toUpper(proc.placa));
+    const clienteSafe = esc(toUpper(proc.cliente_nome));
 
     const lavagemText = proc.lavagem ? `${esc(proc.lavagem.nome)} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
     const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length
@@ -273,8 +273,8 @@ LAVA_CAR PRO RDP
 ===================================
 COMPROVANTE DE SERVIÇOS
 -----------------------------------
-PLACA  : ${proc.placa}
-CLIENTE: ${proc.cliente_nome}
+PLACA  : ${toUpper(proc.placa)}
+CLIENTE: ${toUpper(proc.cliente_nome)}
 ENTRADA: ${entradaStr}
 SAIDA  : ${saidaStr}
 -----------------------------------
@@ -300,4 +300,3 @@ function closeModalDetails() {
     }
     detailsTempObjectUrls = [];
 }
-

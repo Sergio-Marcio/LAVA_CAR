@@ -1,7 +1,7 @@
 // --- REVISION SUMMARY ---
 async function updateReviewSummary() {
     const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
-    const cliente = document.getElementById('inp-cliente').value.trim();
+    const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
     const allServices = await db.getAll('servicos');
 
     const wash = allServices.find(s => s.id === selectedWashId);
@@ -38,8 +38,8 @@ async function updateReviewSummary() {
 // --- SAVE NEW ENTRADA (CHECK-IN) ---
 async function saveInspectionRDP() {
     const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
-    const cliente = document.getElementById('inp-cliente').value.trim();
-    const modelo = document.getElementById('inp-modelo').value.trim();
+    const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
+    const modelo = toUpper(document.getElementById('inp-modelo').value.trim());
     const telefone = document.getElementById('inp-telefone').value.trim();
     const obs = document.getElementById('inp-obs').value.trim();
 
@@ -96,7 +96,7 @@ async function saveInspectionRDP() {
     } else {
         veiculoId = await veiculoStore.add({
             placa: placa,
-            modelo: modelo || 'Geral',
+            modelo: modelo || 'GERAL',
             cliente_id: clienteId,
             criado_em: new Date().toISOString()
         });

@@ -9,8 +9,8 @@ async function loadClientsData() {
     }
 
     container.innerHTML = clients.map(c => {
-        const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(c.nome) : String(c.nome || '');
-        const telSafe = typeof escapeHtml === 'function' ? escapeHtml(c.telefone || 'Sem telefone') : String(c.telefone || 'Sem telefone');
+        const nomeSafe = escapeHtml(toUpper(c.nome));
+        const telSafe = escapeHtml(c.telefone || 'Sem telefone');
         return `
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3">
             <div class="w-10 h-10 bg-brand-100 dark:bg-brand-900/50 rounded-xl flex items-center justify-center text-brand-600 font-bold">
@@ -27,15 +27,15 @@ async function loadClientsData() {
 
 async function loadSeedData() {
     const tx = db.transaction(['clientes', 'veiculos', 'processos'], 'readwrite');
-    const cId = await tx.objectStore('clientes').add({ nome: 'Ana Paula Souza', telefone: '(11) 97777-6666', criado_em: new Date().toISOString() });
-    const vId = await tx.objectStore('veiculos').add({ placa: 'BRA2E19', modelo: 'Jeep Compass', cliente_id: cId, criado_em: new Date().toISOString() });
+    const cId = await tx.objectStore('clientes').add({ nome: 'ANA PAULA SOUZA', telefone: '(11) 97777-6666', criado_em: new Date().toISOString() });
+    const vId = await tx.objectStore('veiculos').add({ placa: 'BRA2E19', modelo: 'JEEP COMPASS', cliente_id: cId, criado_em: new Date().toISOString() });
 
     await tx.objectStore('processos').add({
         veiculo_id: vId,
         cliente_id: cId,
         placa: 'BRA2E19',
-        cliente_nome: 'Ana Paula Souza',
-        modelo: 'Jeep Compass',
+        cliente_nome: 'ANA PAULA SOUZA',
+        modelo: 'JEEP COMPASS',
         data_entrada: new Date().toISOString(),
         data_saida: null,
         status: 'EM_ANDAMENTO',
@@ -802,8 +802,8 @@ async function openModalRefund(id) {
     if (!proc) return;
 
     document.getElementById('ref-processo-id').value = proc.id;
-    document.getElementById('ref-placa').textContent = proc.placa;
-    document.getElementById('ref-cliente').textContent = proc.cliente_nome;
+    document.getElementById('ref-placa').textContent = toUpper(proc.placa);
+    document.getElementById('ref-cliente').textContent = toUpper(proc.cliente_nome);
     document.getElementById('ref-valor-orig').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
     document.getElementById('ref-valor').value = (proc.valor_total || 0).toFixed(2);
     document.getElementById('ref-motivo').value = '';
@@ -835,7 +835,7 @@ async function confirmRefundService() {
         await tx.done;
 
         closeModalRefund();
-        showToast(`Estorno do serviço (${proc.placa}) no valor de R$ ${valorEstorno.toFixed(2)} confirmado!`, 'warning');
+        showToast(`Estorno do serviço (${toUpper(proc.placa)}) no valor de R$ ${valorEstorno.toFixed(2)} confirmado!`, 'warning');
         loadDashboardData();
         if (currentTab === 'reports') loadDailyReport();
     }

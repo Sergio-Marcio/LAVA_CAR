@@ -69,8 +69,8 @@ async function loadDailyReport() {
         listEl.innerHTML = dayProc.map(p => `
             <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
-                    <span class="font-mono font-bold text-slate-900 dark:text-white">${p.placa}</span>
-                    <span>• ${p.cliente_nome}</span>
+                    <span class="font-mono font-bold text-slate-900 dark:text-white">${toUpper(p.placa)}</span>
+                    <span>• ${toUpper(p.cliente_nome)}</span>
                     <span class="px-2 py-0.5 rounded text-[10px] font-bold ${p.status === 'CONCLUIDO' ? 'bg-emerald-100 text-emerald-800' : p.status === 'CANCELADO' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${p.status}</span>
                 </div>
                 <div class="text-right">
@@ -120,7 +120,7 @@ async function loadMonthlyReport() {
         listEl.innerHTML = monthProc.map(p => `
             <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
                 <div>
-                    <strong class="font-mono text-slate-900 dark:text-white">${p.placa}</strong> - ${p.cliente_nome}
+                    <strong class="font-mono text-slate-900 dark:text-white">${toUpper(p.placa)}</strong> - ${toUpper(p.cliente_nome)}
                     <span class="text-[10px] text-slate-400 block">${new Date(p.data_entrada).toLocaleString('pt-BR')}</span>
                 </div>
                 <div class="text-right">
@@ -206,8 +206,8 @@ async function loadCommissionsReport() {
             ${l.detalhes.map(p => `
             <div class="flex items-center justify-between text-xs py-1">
                 <div class="flex items-center gap-2">
-                    <span class="font-mono font-bold text-slate-700 dark:text-slate-300">${p.placa}</span>
-                    <span class="text-slate-400">${p.cliente_nome}</span>
+                    <span class="font-mono font-bold text-slate-700 dark:text-slate-300">${toUpper(p.placa)}</span>
+                    <span class="text-slate-400">${toUpper(p.cliente_nome)}</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-slate-400">Serviço: R$ ${(p.valor_total || 0).toFixed(2)}</span>
