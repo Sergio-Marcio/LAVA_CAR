@@ -45,4 +45,3 @@ select
 from auth.users u
 left join public.perfis p on p.id = u.id
 where p.id is null;
-

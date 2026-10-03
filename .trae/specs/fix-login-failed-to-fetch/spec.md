@@ -22,7 +22,7 @@
 - Alteração no modelo de dados ou permissões de usuário.
 
 ## Background & Context
-O sistema LAVA_CAR Pro é um app PWA frontend vanilla (HTML + JS puro) que usa Supabase para autenticação e persistência em nuvem. O processo de login é implementado no módulo [auth.js](file:///d:/LAVA_CAR/js/auth.js). 
+O sistema LAVA_CAR Pro é um app PWA frontend vanilla (HTML + JS puro) que usa Supabase para autenticação e persistência em nuvem. O processo de login é implementado no módulo [auth.js](file:///d:/LAVA_CAR/js/auth.js).
 
 **Causa Raiz Identificada**:
 1. A função `handleLogin()` (linhas 138-164 de auth.js) chama `sbClient.auth.signInWithPassword()` sem bloco `try/catch` externo. Quando a conexão de rede falha (ou o Supabase responde com erro de rede), o SDK do Supabase retorna um objeto `{ error }` com `error.message === "Failed to fetch"`. O código atual simplesmente concatena essa mensagem crua: `'Erro ao entrar: ' + error.message`.

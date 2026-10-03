@@ -89,4 +89,3 @@ using (
 with check (
   public.is_gerente()
 );
-

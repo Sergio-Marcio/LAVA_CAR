@@ -32,4 +32,3 @@ as $$
 $$;
 
 grant execute on function public.gerente_existe() to anon, authenticated;
-

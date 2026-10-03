@@ -8,4 +8,3 @@ using (
   or ativo = true
   or id = auth.uid()
 );
-

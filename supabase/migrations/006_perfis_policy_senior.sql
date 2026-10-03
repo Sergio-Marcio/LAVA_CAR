@@ -25,4 +25,3 @@ using (
   public.is_senior_ou_gerente()
   or id = auth.uid()
 );
-
