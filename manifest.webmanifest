@@ -1,0 +1,36 @@
+{
+  "name": "LAVA_CAR Pro",
+  "short_name": "LavaCar",
+  "id": "/?source=pwa",
+  "start_url": ".",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0284c7",
+  "description": "App de Gestão de Lava Car: Entrada, Saída, Preços, Serviços Adicionais e RDP.",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova RDP",
+      "short_name": "Nova RDP",
+      "url": "/#new",
+      "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Pátio",
+      "short_name": "Pátio",
+      "url": "/#dashboard",
+      "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

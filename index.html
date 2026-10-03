@@ -6,9 +6,18 @@
     <title>LAVA_CAR Pro - Sistema RDP & Controle de Lavagens</title>
     <meta name="theme-color" content="#0284c7">
     <meta name="description" content="App de Gestão de Lava Car: Entrada, Saída, Preços de Lavagem, Serviços Adicionais e RDP.">
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="LAVA_CAR Pro">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
     <!-- Web App Manifest -->
-    <link rel="manifest" href='data:application/manifest+json,{"name":"LAVA_CAR Pro","short_name":"LavaCar","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0284c7","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3202/3202926.png","sizes":"192x192","type":"image/png"}]}'>
+    <link rel="manifest" href="manifest.webmanifest">
+
+    <!-- Icons -->
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
 
     <!-- Dependencies -->
     <script src="https://unpkg.com/idb@7/build/umd.js"></script>
@@ -764,14 +773,24 @@
 
             <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
                 <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Ações de Banco de Dados</h4>
+                <div id="ultima-sincronia-badge" class="text-[11px] text-slate-500 dark:text-slate-400">Última sincronização: <span id="ultima-sincronia-valor">nunca</span></div>
                 <div class="flex flex-wrap gap-3">
-                    <button onclick="triggerManualSync()" class="touch-target px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-brand-500 transition">
-                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sincronizar com Nuvem
+                    <button onclick="triggerManualSync()" title="Envia processos pendentes para a nuvem e recebe atualizações em seguida. (requer gerente)" class="touch-target px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-brand-500 transition">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> 📡 Sincronizar Tudo
+                    </button>
+                    <button onclick="refreshFromCloud()" title="Baixa apenas o que mudou na nuvem desde a última atualização, e envia pendentes locais primeiro." class="gerente-only touch-target px-4 py-2.5 bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-slate-700 transition">
+                        <i data-lucide="cloud-download" class="w-4 h-4"></i> ⬇️ Atualizar da nuvem
+                    </button>
+                    <button onclick="refreshFromCloud({forceFull:true})" title="Baixa TODO o histórico da nuvem do zero — use em novo dispositivo ou após limpar os dados locais." class="gerente-only touch-target px-4 py-2.5 bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-indigo-600 transition">
+                        <i data-lucide="cloud" class="w-4 h-4"></i> ⬇️⬇️ Atualização COMPLETA
+                    </button>
+                    <button onclick="testCloudSync()" class="gerente-only touch-target px-4 py-2.5 bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-slate-700 transition">
+                        <i data-lucide="cloud-check" class="w-4 h-4"></i> Testar Sync Nuvem
                     </button>
                     <button onclick="exportBackupJSON()" class="touch-target px-4 py-2.5 bg-slate-800 text-white font-medium rounded-xl text-xs flex items-center gap-2 hover:bg-slate-700 transition">
                         <i data-lucide="download" class="w-4 h-4"></i> Exportar Backup JSON
                     </button>
-                    <button onclick="clearAllData()" class="gerente-only touch-target px-4 py-2.5 bg-rose-600/10 text-rose-600 font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-rose-600/20 transition">
+                    <button onclick="clearAllData()" title="Apaga todos os dados do dispositivo. Na próxima atualização da nuvem, todo o histórico será baixado do zero." class="gerente-only touch-target px-4 py-2.5 bg-rose-600/10 text-rose-600 font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-rose-600/20 transition">
                         <i data-lucide="trash-2" class="w-4 h-4"></i> Limpar Dados Locais
                     </button>
                 </div>
@@ -947,11 +966,6 @@
         </div>
     </div>
 
-    <!-- Hidden Printable Ticket HTML Element -->
-    <div id="printable-ticket" class="hidden">
-        <!-- Rendered dynamically for printing -->
-    </div>
-
     <!-- MODAL: ESTORNO DE VALOR / CANCELAMENTO -->
     <div id="modal-refund" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
@@ -1072,6 +1086,7 @@
 
     <!-- Application Scripts (ordem de carregamento importa) -->
     <script src="js/core.js"></script>
+    <script src="js/auth-utils.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/db.js"></script>
     <script src="js/navigation.js"></script>

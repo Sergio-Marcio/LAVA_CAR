@@ -1,0 +1,21 @@
+Opção 1: Publicar no Netlify (Recomendado — com atualizações automáticas)
+Acesse app.netlify.com e faça login (com sua conta GitHub).
+Clique no botão "Add new site" > "Import an existing project".
+Selecione GitHub e escolha o repositório Sergio-Marcio/LAVA_CAR.
+As configurações já estão prontas no arquivo @/i:LAVA_CAR/netlify.toml:
+Publish directory: . (raiz)
+Clique em "Deploy LAVA_CAR".
+Em segundos você terá um link público HTTPS (ex: https://seu-lava-car.netlify.app). Todo git push atualizará o site automaticamente.
+Opção 2: Publicar no GitHub Pages (Sem criar contas extras)
+Acesse seu repositório: https://github.com/Sergio-Marcio/LAVA_CAR.
+Clique na aba Settings (Configurações) no topo.
+No menu lateral esquerdo, clique em Pages.
+Em Build and deployment > Branch:
+Selecione o branch main e a pasta /(root).
+Clique em Save.
+Aguarde cerca de 1 minuto. O link ficará disponível em: https://sergio-marcio.github.io/LAVA_CAR/
+Opção 3: Publicar na Vercel
+Acesse vercel.com e faça login com GitHub.
+Clique em "Add New..." > "Project".
+Importe Sergio-Marcio/LAVA_CAR e clique em Deploy.
+Feedback submitted

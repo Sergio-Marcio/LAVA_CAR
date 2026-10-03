@@ -13,6 +13,8 @@ async function loadServicesTab() {
 
     washList.innerHTML = washes.map(s => {
         const isSel = s.id === simSelectedWashId;
+        const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
+        const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || 'Sem descrição') : String(s.descricao || 'Sem descrição');
         return `
         <div class="p-3.5 rounded-xl border-2 transition flex items-center justify-between gap-3 ${isSel ? 'border-brand-500 bg-brand-50/60 dark:bg-brand-950/40 shadow-sm' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div onclick="selectSimWash(${s.id})" class="flex-1 cursor-pointer">
@@ -20,9 +22,9 @@ async function loadServicesTab() {
                     <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
                         ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
                     </span>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${s.nome}</h5>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">${nomeSafe}</h5>
                 </div>
-                <p class="text-[11px] text-slate-500 mt-1">${s.descricao || 'Sem descrição'}</p>
+                <p class="text-[11px] text-slate-500 mt-1">${descSafe}</p>
             </div>
             <div class="flex items-center gap-2">
                 <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-xs sm:text-sm whitespace-nowrap">R$ ${s.preco.toFixed(2)}</span>
@@ -34,13 +36,15 @@ async function loadServicesTab() {
 
     extraList.innerHTML = extras.map(s => {
         const isSel = simSelectedExtraIds.has(s.id);
+        const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
+        const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || 'Sem descrição') : String(s.descricao || 'Sem descrição');
         return `
         <div class="p-3 rounded-xl border transition flex items-center justify-between gap-3 ${isSel ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div onclick="toggleSimExtra(${s.id})" class="flex-1 cursor-pointer flex items-center gap-2">
                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
-                    <p class="text-[10px] text-slate-500">${s.descricao || 'Sem descrição'}</p>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${nomeSafe}</h5>
+                    <p class="text-[10px] text-slate-500">${descSafe}</p>
                 </div>
             </div>
             <div class="flex items-center gap-2">

@@ -1,5 +1,6 @@
 // --- DASHBOARD RENDER & SAÍDA (CHECKOUT) ---
 async function loadDashboardData() {
+    try { if (typeof window._atualizarBadgeSincronia === 'function') window._atualizarBadgeSincronia(); } catch (_) {}
     if (!db) return;
     const tx = db.transaction('processos', 'readonly');
     const all = await tx.store.getAll();
@@ -27,7 +28,10 @@ async function filterInspections(all) {
     const statusFilter = document.getElementById('filter-status').value;
 
     const filtered = all.filter(p => {
-        const matchesQuery = p.placa.toLowerCase().includes(query) || p.cliente_nome.toLowerCase().includes(query) || (p.lavagem && p.lavagem.nome.toLowerCase().includes(query));
+        const placa = (p.placa || '').toLowerCase();
+        const cliente = (p.cliente_nome || '').toLowerCase();
+        const lavagem = (p.lavagem?.nome || '').toLowerCase();
+        const matchesQuery = placa.includes(query) || cliente.includes(query) || lavagem.includes(query);
         const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
         return matchesQuery && matchesStatus;
     });
@@ -54,6 +58,10 @@ function renderInspectionList(processos) {
         const lavagemNome = p.lavagem ? p.lavagem.nome : 'Sem lavagem';
         const totalFormatted = (p.valor_total || 0).toFixed(2);
 
+        const placaSafe = typeof escapeHtml === 'function' ? escapeHtml(p.placa) : String(p.placa || '');
+        const clienteSafe = typeof escapeHtml === 'function' ? escapeHtml(p.cliente_nome) : String(p.cliente_nome || '');
+        const lavagemSafe = typeof escapeHtml === 'function' ? escapeHtml(lavagemNome) : String(lavagemNome || '');
+
         let badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
         let statusLabel = 'NO PÁTIO (EM ANDAMENTO)';
         if (p.status === 'CONCLUIDO') {
@@ -68,17 +76,17 @@ function renderInspectionList(processos) {
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-brand-500/50 transition">
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex flex-col items-center justify-center text-brand-600 dark:text-brand-400 font-bold font-mono text-xs border border-slate-200 dark:border-slate-700">
-                    <span>${p.placa.substring(0, 3)}</span>
-                    <span class="text-[10px] text-slate-400">${p.placa.substring(3)}</span>
+                    <span>${placaSafe.substring(0, 3)}</span>
+                    <span class="text-[10px] text-slate-400">${placaSafe.substring(3)}</span>
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${p.placa}</h4>
+                        <h4 class="font-bold text-slate-900 dark:text-white font-mono tracking-wide">${placaSafe}</h4>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
                             ${statusLabel}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-600 dark:text-slate-300">${p.cliente_nome} • <span class="font-semibold text-brand-600">${lavagemNome}</span></p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300">${clienteSafe} • <span class="font-semibold text-brand-600">${lavagemSafe}</span></p>
                     <p class="text-[10px] text-slate-400 mt-0.5"><i data-lucide="clock" class="w-3 h-3 inline mr-1"></i>Entrada: ${dateEntradaStr}</p>
                 </div>
             </div>
@@ -146,6 +154,7 @@ async function confirmCheckout() {
         proc.status = 'CONCLUIDO';
         proc.data_saida = new Date().toISOString();
         proc.forma_pagamento = formaPagamento;
+        proc.synced = false;
         await tx.store.put(proc);
         await tx.done;
 
@@ -156,11 +165,38 @@ async function confirmCheckout() {
 }
 
 // --- VIEW DETAILS & PRINT TICKET ---
+let detailsTempObjectUrls = [];
+
 async function viewDetails(id) {
+    for (const u of detailsTempObjectUrls) {
+        if (typeof u === 'string' && u.startsWith('blob:')) {
+            try { URL.revokeObjectURL(u); } catch (_) {}
+        }
+    }
+    detailsTempObjectUrls = [];
+
     const proc = await db.get('processos', id);
     if (!proc) return;
 
     const midias = await db.getAllFromIndex('registros_midia', 'processo_id', id);
+
+    const midiasRender = (midias || []).map(m => {
+        if (m && m.blob) {
+            const u = URL.createObjectURL(m.blob);
+            detailsTempObjectUrls.push(u);
+            return { ...m, renderUrl: u, missing: false };
+        }
+
+        if (m?.caminho_arquivo && typeof sbClient !== 'undefined' && sbClient?.storage?.from) {
+            const { data } = sbClient.storage.from('midias').getPublicUrl(m.caminho_arquivo);
+            const url = data?.publicUrl || '';
+            return { ...m, renderUrl: url, missing: !url };
+        }
+
+        const rawUrl = m?.url || '';
+        const missing = typeof rawUrl === 'string' && rawUrl.startsWith('blob:');
+        return { ...m, renderUrl: missing ? '' : rawUrl, missing };
+    });
 
     const content = document.getElementById('modal-details-content');
     const printEl = document.getElementById('printable-ticket');
@@ -168,13 +204,26 @@ async function viewDetails(id) {
     const entradaStr = new Date(proc.data_entrada).toLocaleString('pt-BR');
     const saidaStr = proc.data_saida ? new Date(proc.data_saida).toLocaleString('pt-BR') : 'Veículo no Pátio';
 
-    const lavagemText = proc.lavagem ? `${proc.lavagem.nome} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
-    const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length ? proc.servicos_adicionais.map(s => `${s.nome} (R$ ${s.preco.toFixed(2)})`).join('<br>') : 'Nenhum';
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+
+    const placaSafe = esc(proc.placa);
+    const clienteSafe = esc(proc.cliente_nome);
+
+    const lavagemText = proc.lavagem ? `${esc(proc.lavagem.nome)} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
+    const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length
+        ? proc.servicos_adicionais.map(s => `${esc(s.nome)} (R$ ${s.preco.toFixed(2)})`).join('<br>')
+        : 'Nenhum';
 
     content.innerHTML = `
         <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${proc.placa}</strong></div>
-            <div><span class="text-slate-400">Cliente:</span> <strong>${proc.cliente_nome}</strong></div>
+            <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${placaSafe}</strong></div>
+            <div><span class="text-slate-400">Cliente:</span> <strong>${clienteSafe}</strong></div>
             <div><span class="text-slate-400">Entrada:</span> ${entradaStr}</div>
             <div><span class="text-slate-400">Saída:</span> ${saidaStr}</div>
         </div>
@@ -201,13 +250,18 @@ async function viewDetails(id) {
 
         <div>
             <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Observações</h5>
-            <p class="text-xs p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">${proc.observacoes || 'Sem observações.'}</p>
+            <p class="text-xs p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">${esc(proc.observacoes || 'Sem observações.')}</p>
         </div>
 
         <div>
-            <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Mídias Vinculadas (${midias.length})</h5>
+            <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Mídias Vinculadas (${midiasRender.length})</h5>
             <div class="grid grid-cols-3 gap-2">
-                ${midias.map(m => m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-20 object-cover rounded-lg">` : `<video src="${m.url}" controls class="w-full h-20 bg-black rounded-lg"></video>`).join('')}
+                ${midiasRender.map(m => {
+                    if (m.missing) return `<div class="w-full h-20 rounded-lg bg-slate-200 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-center text-center px-2">Mídia indisponível</div>`;
+                    return m.tipo === 'FOTO'
+                        ? `<img src="${esc(m.renderUrl)}" class="w-full h-20 object-cover rounded-lg">`
+                        : `<video src="${esc(m.renderUrl)}" controls class="w-full h-20 bg-black rounded-lg"></video>`;
+                }).join('')}
             </div>
         </div>
     `;
@@ -239,5 +293,11 @@ Obrigado pela preferência!
 
 function closeModalDetails() {
     document.getElementById('modal-details').classList.add('hidden');
+    for (const u of detailsTempObjectUrls) {
+        if (typeof u === 'string' && u.startsWith('blob:')) {
+            try { URL.revokeObjectURL(u); } catch (_) {}
+        }
+    }
+    detailsTempObjectUrls = [];
 }
 

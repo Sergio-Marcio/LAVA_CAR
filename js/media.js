@@ -160,6 +160,10 @@ function renderMediaGallery() {
 }
 
 function removeMedia(idx) {
+    const m = currentInspectionMedia[idx];
+    if (m && typeof m.url === 'string' && m.url.startsWith('blob:')) {
+        try { URL.revokeObjectURL(m.url); } catch (_) {}
+    }
     currentInspectionMedia.splice(idx, 1);
     renderMediaGallery();
 }

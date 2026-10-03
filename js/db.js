@@ -2,7 +2,7 @@
 async function initDB() {
     try {
         db = await idb.openDB(DB_NAME, DB_VERSION, {
-            upgrade(db, oldVersion) {
+            upgrade(db, oldVersion, newVersion, transaction) {
                 if (!db.objectStoreNames.contains('clientes')) {
                     db.createObjectStore('clientes', { keyPath: 'id', autoIncrement: true });
                 }
@@ -14,10 +14,22 @@ async function initDB() {
                     const pStore = db.createObjectStore('processos', { keyPath: 'id', autoIncrement: true });
                     pStore.createIndex('status', 'status');
                     pStore.createIndex('placa', 'placa');
+                    pStore.createIndex('cloud_id', 'cloud_id', { unique: true });
+                } else {
+                    const pStore = transaction.objectStore('processos');
+                    if (!pStore.indexNames.contains('cloud_id')) {
+                        pStore.createIndex('cloud_id', 'cloud_id', { unique: true });
+                    }
                 }
                 if (!db.objectStoreNames.contains('registros_midia')) {
                     const mStore = db.createObjectStore('registros_midia', { keyPath: 'id', autoIncrement: true });
                     mStore.createIndex('processo_id', 'processo_id');
+                    mStore.createIndex('cloud_media_id', 'cloud_media_id', { unique: true });
+                } else {
+                    const mStore = transaction.objectStore('registros_midia');
+                    if (!mStore.indexNames.contains('cloud_media_id')) {
+                        mStore.createIndex('cloud_media_id', 'cloud_media_id', { unique: true });
+                    }
                 }
                 if (!db.objectStoreNames.contains('servicos')) {
                     db.createObjectStore('servicos', { keyPath: 'id', autoIncrement: true });

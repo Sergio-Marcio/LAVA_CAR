@@ -89,12 +89,12 @@ async function saveInspectionRDP() {
 
     // Veículo
     let veiculoId;
-    const existingVehicles = await tx.objectStore('veiculos').getAll();
-    const foundVehicle = existingVehicles.find(v => v.placa === placa);
+    const veiculoStore = tx.objectStore('veiculos');
+    const foundVehicle = await veiculoStore.index('placa').get(placa);
     if (foundVehicle) {
         veiculoId = foundVehicle.id;
     } else {
-        veiculoId = await tx.objectStore('veiculos').add({
+        veiculoId = await veiculoStore.add({
             placa: placa,
             modelo: modelo || 'Geral',
             cliente_id: clienteId,
@@ -138,7 +138,11 @@ async function saveInspectionRDP() {
             processo_id: processoId,
             tipo: media.tipo,
             nome: media.nome,
-            url: media.url,
+            blob: media.blob || null,
+            mime_type: media.blob?.type || null,
+            caminho_arquivo: null,
+            cloud_media_id: null,
+            synced: false,
             criado_em: new Date().toISOString()
         });
     }
@@ -146,12 +150,28 @@ async function saveInspectionRDP() {
     await tx.done;
 
     showToast('Entrada do Veículo registrada com sucesso!', 'success');
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        showToast('Registro salvo offline — será sincronizado automaticamente quando você voltar à internet.', 'info');
+    }
     resetRdpForm();
     switchTab('dashboard');
+
+    if (typeof navigator !== 'undefined' && navigator.onLine && typeof triggerManualSync === 'function') {
+        setTimeout(function () {
+            try {
+                triggerManualSync({ allowCurrentUserPushOnly: true, silentErrors: false }).catch(function () {});
+            } catch (_) {}
+        }, 150);
+    }
 }
 
 function resetRdpForm() {
     document.getElementById('rdp-form').reset();
+    for (const m of currentInspectionMedia) {
+        if (m && typeof m.url === 'string' && m.url.startsWith('blob:')) {
+            try { URL.revokeObjectURL(m.url); } catch (_) {}
+        }
+    }
     currentInspectionMedia = [];
     damagePoints = [];
     selectedWashId = null;

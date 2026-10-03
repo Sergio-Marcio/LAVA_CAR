@@ -62,6 +62,8 @@ async function renderServicesSelectorsInWizard() {
 
     washGrid.innerHTML = washTypes.map(s => {
         const isSel = s.id === selectedWashId;
+        const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
+        const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || '') : String(s.descricao || '');
         return `
         <div onclick="selectWashType(${s.id})" class="p-4 rounded-xl border-2 cursor-pointer transition flex items-center justify-between ${isSel ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 shadow-sm' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div>
@@ -69,9 +71,9 @@ async function renderServicesSelectorsInWizard() {
                     <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
                         ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
                     </span>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${s.nome}</h5>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-sm">${nomeSafe}</h5>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">${s.descricao || ''}</p>
+                <p class="text-xs text-slate-500 mt-1">${descSafe}</p>
             </div>
             <span class="font-mono font-extrabold text-brand-600 dark:text-brand-400 text-sm">R$ ${s.preco.toFixed(2)}</span>
         </div>`;
@@ -79,13 +81,15 @@ async function renderServicesSelectorsInWizard() {
 
     extraGrid.innerHTML = extraServices.map(s => {
         const isSel = selectedExtraIds.has(s.id);
+        const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
+        const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || '') : String(s.descricao || '');
         return `
         <div onclick="toggleExtraService(${s.id})" class="p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${isSel ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div class="flex items-center gap-2">
                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${s.nome}</h5>
-                    <p class="text-[10px] text-slate-500">${s.descricao || ''}</p>
+                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${nomeSafe}</h5>
+                    <p class="text-[10px] text-slate-500">${descSafe}</p>
                 </div>
             </div>
             <span class="font-mono font-bold text-emerald-600 text-xs">R$ ${s.preco.toFixed(2)}</span>

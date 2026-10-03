@@ -2,13 +2,67 @@
 const SUPABASE_URL = 'https://khbvhjsqvduxzqurrupr.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_XT_AT0BaYFh03wMfXvKqHg_-fq72Npb';
 
-const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let sbClient = null;
+let sbSignupClient = null;
 
-// Cliente secundário sem persistência de sessão: usado pelo gerente para
-// cadastrar funcionários sem derrubar a própria sessão
-const sbSignupClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false }
-});
+(function initClientsSafe() {
+    try {
+        if (window.supabase?.createClient) {
+            sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: {
+                    storageKey: 'lavacar_auth',
+                    persistSession: true,
+                    autoRefreshToken: true
+                }
+            });
+
+            sbSignupClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: {
+                    storageKey: 'lavacar_signup',
+                    persistSession: false,
+                    autoRefreshToken: false
+                }
+            });
+        }
+    } catch (e) {
+        sbClient = null;
+        sbSignupClient = null;
+        try {
+            const U = window.LavaCarAuthUtils;
+            if (U && U.logAuthError) {
+                U.logAuthError({
+                    operation: 'init_supabase_client',
+                    kind: 'unknown',
+                    message: (e && e.message) ? e.message : String(e),
+                    stack: (e && e.stack) ? e.stack : undefined,
+                    attempt: 0,
+                    totalAttempts: 1
+                });
+            }
+        } catch (_) {}
+    }
+})();
+
+const _U = (function getUtils() {
+    const U = window.LavaCarAuthUtils || {};
+    return {
+        isOnline: U.isOnline || function () { try { return !!navigator.onLine; } catch (_) { return true; } },
+        classifyAuthError: U.classifyAuthError || function (err) {
+            return { kind: 'unknown', userMessage: 'Ocorreu um erro inesperado. Tente novamente.', shouldRetry: false, rawMessage: (err && err.message) || '' };
+        },
+        withTimeout: U.withTimeout || function (p) { return p; },
+        withRetry: U.withRetry || async function (fn) { try { return { ok: true, result: await fn(0,1), attempt: 0, totalAttempts: 1 }; } catch (e) { return { ok: false, error: e, classified: U.classifyAuthError ? U.classifyAuthError(e) : {kind:'unknown', userMessage: 'Erro.'}, attempt: 1, totalAttempts: 1 }; } },
+        logAuthError: U.logAuthError || function () {},
+        getAuthErrorLogs: U.getAuthErrorLogs || function () { return []; },
+        clearAuthErrorLogs: U.clearAuthErrorLogs || function () {},
+        exponentialBackoffDelay: U.exponentialBackoffDelay || function () { return 1000; },
+        sleep: U.sleep || function (ms) { return new Promise(r => setTimeout(r, ms)); }
+    };
+})();
+
+window.isOnline = typeof window.isOnline === 'function' ? window.isOnline : _U.isOnline;
+window.getAuthErrorLogs = typeof window.getAuthErrorLogs === 'function' ? window.getAuthErrorLogs : _U.getAuthErrorLogs;
+window.clearAuthErrorLogs = typeof window.clearAuthErrorLogs === 'function' ? window.clearAuthErrorLogs : _U.clearAuthErrorLogs;
 
 let currentUser = null;
 let currentUserRole = null; // 'GERENTE' | 'LAVADOR_SENIOR' | 'LAVADOR'
@@ -20,20 +74,81 @@ const ROLE_LABELS = {
 };
 
 async function initAuth() {
-    const { data: { session } } = await sbClient.auth.getSession();
-    if (session) {
-        await onLoggedIn(session.user);
-    } else {
-        await decideLoginOrSetup();
+    if (!sbClient) {
+        currentUser = null;
+        currentUserRole = null;
+        document.getElementById('login-form-box')?.classList.remove('hidden');
+        document.getElementById('setup-form-box')?.classList.add('hidden');
+        showLoginScreen();
+        const errEl = document.getElementById('login-error');
+        if (errEl) {
+            errEl.textContent = 'Não foi possível carregar o Supabase. Verifique sua conexão e recarregue o app.';
+            errEl.classList.remove('hidden');
+        }
+        return;
     }
 
-    sbClient.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
-            currentUser = null;
-            currentUserRole = null;
-            decideLoginOrSetup();
+    try {
+        const getSessionOp = _U.withTimeout(
+            sbClient.auth.getSession(),
+            15000
+        );
+        const { data: { session } = {}, error: getSessionErr } = await getSessionOp.catch(function (err) {
+            const classified = _U.classifyAuthError(err);
+            _U.logAuthError({
+                operation: 'auth_getSession',
+                kind: classified.kind,
+                message: classified.rawMessage || (err && err.message) || String(err),
+                stack: (err && err.stack) ? err.stack : undefined,
+                attempt: 0,
+                totalAttempts: 1,
+                extra: { stage: 'initAuth_getSession' }
+            });
+            return { data: {}, error: err };
+        });
+
+        if (getSessionErr) {
+            // fallthrough para decideLoginOrSetup abaixo, via bloco catch / sem sessão
         }
-    });
+
+        if (session) {
+            await onLoggedIn(session.user);
+            return;
+        } else {
+            await decideLoginOrSetup();
+        }
+    } catch (e) {
+        const classified = _U.classifyAuthError(e);
+        _U.logAuthError({
+            operation: 'auth_initAuth',
+            kind: classified.kind,
+            message: classified.rawMessage || (e && e.message) || String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { stage: 'initAuth_catch' }
+        });
+        try { await decideLoginOrSetup(); } catch (_) {}
+    }
+
+    try {
+        sbClient.auth.onAuthStateChange((event) => {
+            if (event === 'SIGNED_OUT') {
+                currentUser = null;
+                currentUserRole = null;
+                try { decideLoginOrSetup(); } catch (_) {}
+            }
+        });
+    } catch (e) {
+        _U.logAuthError({
+            operation: 'auth_onAuthStateChange_subscribe',
+            kind: 'unknown',
+            message: (e && e.message) ? e.message : String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1
+        });
+    }
 }
 
 // Mostra o formulário de setup (cadastro do gerente) no primeiro acesso,
@@ -41,10 +156,37 @@ async function initAuth() {
 async function decideLoginOrSetup() {
     let temGerente = true;
     try {
-        const { data, error } = await sbClient.rpc('gerente_existe');
+        const rpcCall = _U.withTimeout(
+            sbClient.rpc('gerente_existe'),
+            10000
+        );
+        const { data, error } = await rpcCall;
         if (!error) temGerente = data === true;
+        if (error) {
+            const classified = _U.classifyAuthError(error);
+            _U.logAuthError({
+                operation: 'auth_rpc_gerente_existe',
+                kind: classified.kind,
+                message: classified.rawMessage || (error && error.message) || String(error),
+                stack: (error && error.stack) ? error.stack : undefined,
+                attempt: 0,
+                totalAttempts: 1,
+                extra: { fallbackUsed: true }
+            });
+            temGerente = true;
+        }
     } catch (e) {
-        console.warn('Não foi possível verificar setup inicial (offline?):', e);
+        const classified = _U.classifyAuthError(e);
+        _U.logAuthError({
+            operation: 'auth_rpc_gerente_existe_catch',
+            kind: classified.kind,
+            message: classified.rawMessage || (e && e.message) || String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { fallbackUsed: true }
+        });
+        temGerente = true;
     }
 
     document.getElementById('login-form-box').classList.toggle('hidden', !temGerente);
@@ -55,6 +197,7 @@ async function decideLoginOrSetup() {
 // --- SETUP INICIAL: CADASTRO DO GERENTE ---
 async function handleSetupGerente(evt) {
     evt.preventDefault();
+    if (!sbClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
     const nome = document.getElementById('setup-nome').value.trim();
     const email = document.getElementById('setup-email').value.trim();
     const senha = document.getElementById('setup-senha').value;
@@ -68,76 +211,232 @@ async function handleSetupGerente(evt) {
         return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Criando conta...';
-
-    const { data, error } = await sbClient.auth.signUp({
-        email,
-        password: senha,
-        options: { data: { nome, role: 'GERENTE' } }
-    });
-
-    btn.disabled = false;
-    btn.textContent = 'Criar Conta do Gerente';
-
-    if (error) {
-        errEl.textContent = 'Erro: ' + error.message;
+    if (!_U.isOnline()) {
+        errEl.textContent = 'Sem conexão com a internet. Verifique sua conexão e tente novamente.';
         errEl.classList.remove('hidden');
+        _U.logAuthError({
+            operation: 'auth_setupGerente_offline_block',
+            kind: 'offline_or_network',
+            message: 'Offline antes de signUp',
+            attempt: 0,
+            totalAttempts: 1
+        });
         return;
     }
 
-    if (data.session) {
-        await onLoggedIn(data.user);
-    } else {
+    btn.disabled = true;
+    btn.textContent = 'Criando conta...';
+
+    let classified = null;
+    let errMsg = null;
+
+    try {
+        const attemptResult = await _U.withRetry(async function (attempt, total) {
+            const call = sbClient.auth.signUp({
+                email,
+                password: senha,
+                options: { data: { nome, role: 'GERENTE' } }
+            });
+            const withTimeout = _U.withTimeout(call, 15000);
+            const { data, error } = await withTimeout;
+            if (error) throw error;
+            return { data };
+        }, { operation: 'auth_setupGerente_signUp', maxAttempts: 3 });
+
+        if (!attemptResult.ok) {
+            const err = attemptResult.error;
+            classified = attemptResult.classified || _U.classifyAuthError(err);
+            errMsg = classified.userMessage;
+            _U.logAuthError({
+                operation: 'auth_setupGerente_signUp_fail',
+                kind: classified.kind,
+                message: classified.rawMessage || (err && err.message) || String(err),
+                stack: (err && err.stack) ? err.stack : undefined,
+                attempt: attemptResult.attempt,
+                totalAttempts: attemptResult.totalAttempts
+            });
+        } else {
+            const { data } = attemptResult.result;
+            if (data.session) {
+                await onLoggedIn(data.user);
+                return;
+            } else {
+                errEl.classList.remove('hidden');
+                errEl.className = errEl.className.replace('text-rose-600 bg-rose-50 dark:bg-rose-950/50', 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50');
+                errEl.textContent = 'Conta criada! Confirme o e-mail recebido e faça login.';
+                setTimeout(() => decideLoginOrSetup(), 4000);
+                return;
+            }
+        }
+    } catch (e) {
+        classified = _U.classifyAuthError(e);
+        errMsg = classified.userMessage;
+        _U.logAuthError({
+            operation: 'auth_setupGerente_catch',
+            kind: classified.kind,
+            message: classified.rawMessage || (e && e.message) || String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1
+        });
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Criar Conta do Gerente';
+    }
+
+    if (errMsg) {
+        errEl.textContent = errMsg;
         errEl.classList.remove('hidden');
-        errEl.className = errEl.className.replace('text-rose-600 bg-rose-50 dark:bg-rose-950/50', 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50');
-        errEl.textContent = 'Conta criada! Confirme o e-mail recebido e faça login.';
-        setTimeout(() => decideLoginOrSetup(), 4000);
     }
 }
 
 async function handleLogin(evt) {
     evt.preventDefault();
+    if (!sbClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
     const email = document.getElementById('login-email').value.trim();
     const senha = document.getElementById('login-senha').value;
     const btn = document.getElementById('login-btn');
     const errEl = document.getElementById('login-error');
 
     errEl.classList.add('hidden');
-    btn.disabled = true;
-    btn.textContent = 'Entrando...';
 
-    const { data, error } = await sbClient.auth.signInWithPassword({ email, password: senha });
-
-    btn.disabled = false;
-    btn.textContent = 'Entrar';
-
-    if (error) {
-        errEl.textContent = error.message === 'Invalid login credentials'
-            ? 'E-mail ou senha inválidos.'
-            : 'Erro ao entrar: ' + error.message;
+    if (!_U.isOnline()) {
+        errEl.textContent = 'Sem conexão com a internet. Verifique sua conexão e tente novamente.';
         errEl.classList.remove('hidden');
+        _U.logAuthError({
+            operation: 'auth_handleLogin_offline_block',
+            kind: 'offline_or_network',
+            message: 'Offline antes de signInWithPassword',
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { email: email || '' }
+        });
         return;
     }
 
-    await onLoggedIn(data.user);
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
+
+    let errMsg = null;
+    let classified = null;
+
+    try {
+        const attemptResult = await _U.withRetry(async function (attempt, total) {
+            const call = sbClient.auth.signInWithPassword({ email, password: senha });
+            const withTimeout = _U.withTimeout(call, 15000);
+            const { data, error } = await withTimeout;
+            if (error) throw error;
+            return { data };
+        }, { operation: 'auth_handleLogin_signIn', maxAttempts: 3 });
+
+        if (!attemptResult.ok) {
+            const err = attemptResult.error;
+            classified = attemptResult.classified || _U.classifyAuthError(err);
+            errMsg = classified.userMessage;
+            _U.logAuthError({
+                operation: 'auth_handleLogin_signIn_fail',
+                kind: classified.kind,
+                message: classified.rawMessage || (err && err.message) || String(err),
+                stack: (err && err.stack) ? err.stack : undefined,
+                attempt: attemptResult.attempt,
+                totalAttempts: attemptResult.totalAttempts,
+                extra: { email: email || '' }
+            });
+        } else {
+            const { data } = attemptResult.result;
+            await onLoggedIn(data.user);
+            return;
+        }
+    } catch (e) {
+        classified = _U.classifyAuthError(e);
+        errMsg = classified.userMessage;
+        _U.logAuthError({
+            operation: 'auth_handleLogin_catch',
+            kind: classified.kind,
+            message: classified.rawMessage || (e && e.message) || String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { email: email || '' }
+        });
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+    }
+
+    if (errMsg) {
+        errEl.textContent = errMsg;
+        errEl.classList.remove('hidden');
+    }
 }
 
 async function onLoggedIn(user) {
     currentUser = user;
 
-    // Busca o papel do usuário na tabela perfis
-    const { data: perfil, error } = await sbClient
-        .from('perfis')
-        .select('nome, role, ativo')
-        .eq('id', user.id)
-        .single();
+    let perfil = null;
+    let perfilError = null;
 
-    if (error || !perfil) {
-        console.error('Erro ao buscar perfil:', error);
+    try {
+        const queryPromise = sbClient
+            .from('perfis')
+            .select('nome, role, ativo')
+            .eq('id', user.id)
+            .single();
+        const withTimeout = _U.withTimeout(queryPromise, 10000);
+        const { data, error } = await withTimeout;
+        perfil = data;
+        perfilError = error;
+
+        if (error) {
+            const classified = _U.classifyAuthError(error);
+            _U.logAuthError({
+                operation: 'auth_onLoggedIn_fetchPerfil',
+                kind: classified.kind,
+                message: classified.rawMessage || (error && error.message) || String(error),
+                stack: (error && error.stack) ? error.stack : undefined,
+                attempt: 0,
+                totalAttempts: 1,
+                extra: { userId: user ? user.id : undefined }
+            });
+        }
+    } catch (e) {
+        perfilError = e;
+        const classified = _U.classifyAuthError(e);
+        _U.logAuthError({
+            operation: 'auth_onLoggedIn_fetchPerfil_catch',
+            kind: classified.kind,
+            message: classified.rawMessage || (e && e.message) || String(e),
+            stack: (e && e.stack) ? e.stack : undefined,
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { userId: user ? user.id : undefined }
+        });
+    }
+
+    if (perfilError || !perfil) {
+        console.error('Erro ao buscar perfil:', perfilError);
         currentUserRole = 'LAVADOR'; // papel mais restrito como fallback
     } else if (perfil.ativo === false) {
-        await sbClient.auth.signOut();
+        _U.logAuthError({
+            operation: 'auth_onLoggedIn_usuarioInativo',
+            kind: 'user_disabled',
+            message: 'Usuário com perfil ativo=false tentou acessar. SignOut.',
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { userId: user ? user.id : undefined, role: perfil ? perfil.role : undefined }
+        });
+        try {
+            await sbClient.auth.signOut();
+        } catch (e) {
+            _U.logAuthError({
+                operation: 'auth_onLoggedIn_signOut_inactive',
+                kind: 'unknown',
+                message: (e && e.message) ? e.message : String(e),
+                stack: (e && e.stack) ? e.stack : undefined,
+                attempt: 0,
+                totalAttempts: 1
+            });
+        }
         showToast('Usuário desativado. Contate o gerente.', 'error');
         return;
     } else {
@@ -147,12 +446,32 @@ async function onLoggedIn(user) {
     hideLoginScreen();
     applyRoleUI(perfil ? perfil.nome : user.email);
     showToast(`Bem-vindo, ${perfil?.nome || user.email} (${ROLE_LABELS[currentUserRole]})`, 'success');
-    loadLavadoresDropdown();
+    try { loadLavadoresDropdown(); } catch (_) {}
 }
 
 async function handleLogout() {
+    if (!sbClient) {
+        currentUser = null;
+        currentUserRole = null;
+        try { return decideLoginOrSetup(); } catch (_) {}
+    }
     if (confirm('Deseja sair do sistema?')) {
-        await sbClient.auth.signOut();
+        try {
+            await sbClient.auth.signOut();
+        } catch (e) {
+            const classified = _U.classifyAuthError(e);
+            _U.logAuthError({
+                operation: 'auth_handleLogout_signOut',
+                kind: classified.kind,
+                message: classified.rawMessage || (e && e.message) || String(e),
+                stack: (e && e.stack) ? e.stack : undefined,
+                attempt: 0,
+                totalAttempts: 1
+            });
+            currentUser = null;
+            currentUserRole = null;
+            try { decideLoginOrSetup(); } catch (_) {}
+        }
     }
 }
 
@@ -192,6 +511,7 @@ function isSeniorOuGerente() { return ['GERENTE', 'LAVADOR_SENIOR'].includes(cur
 // --- GESTÃO DE EQUIPE (somente GERENTE) ---
 async function loadTeam() {
     if (!isGerente()) return;
+    if (!sbClient) return;
     const container = document.getElementById('team-list');
     if (!container) return;
 
@@ -240,6 +560,7 @@ async function loadTeam() {
 
 async function createEmployee(evt) {
     evt.preventDefault();
+    if (!sbClient || !sbSignupClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
     const nome = document.getElementById('emp-nome').value.trim();
     const email = document.getElementById('emp-email').value.trim();
     const senha = document.getElementById('emp-senha').value;
@@ -268,18 +589,46 @@ async function createEmployee(evt) {
 
     if (error) {
         btn.disabled = false;
-        return showToast('Erro ao cadastrar: ' + error.message, 'error');
+        const classified = _U.classifyAuthError(error);
+        _U.logAuthError({
+            operation: 'auth_createEmployee_signUp',
+            kind: classified.kind,
+            message: classified.rawMessage || error.message,
+            stack: error.stack,
+            attempt: 0,
+            totalAttempts: 1,
+            extra: { email, role }
+        });
+        return showToast('Erro ao cadastrar: ' + (classified.userMessage || error.message), 'error');
     }
 
     // Garante persistência dos dados no perfil
     if (data.user) {
-        await sbClient.from('perfis').update({
-            nome,
-            role,
-            taxa_carro: taxaCarro,
-            comissao_pct: comissaoPct,
-            ativo: true
-        }).eq('id', data.user.id);
+        const { error: perfilErr } = await sbClient
+            .from('perfis')
+            .upsert({
+                id: data.user.id,
+                nome,
+                email,
+                role,
+                taxa_carro: taxaCarro,
+                comissao_pct: comissaoPct,
+                ativo: true
+            }, { onConflict: 'id' });
+
+        if (perfilErr) {
+            console.warn('Falha ao salvar perfil do funcionário:', perfilErr);
+            const classified = _U.classifyAuthError(perfilErr);
+            _U.logAuthError({
+                operation: 'auth_createEmployee_perfil_upsert',
+                kind: classified.kind,
+                message: classified.rawMessage || perfilErr.message,
+                stack: perfilErr.stack,
+                attempt: 0,
+                totalAttempts: 1,
+                extra: { userId: data.user.id }
+            });
+        }
     }
 
     btn.disabled = false;
@@ -349,11 +698,20 @@ async function loadLavadoresDropdown() {
     }
 
     try {
-        const { data, error } = await sbClient
+        const isPriv = typeof isSeniorOuGerente === 'function' ? isSeniorOuGerente() : currentUserRole === 'GERENTE';
+
+        let query = sbClient
             .from('perfis')
             .select('id, nome, email, role, taxa_carro, comissao_pct')
-            .eq('ativo', true)
             .order('nome', { ascending: true });
+
+        if (!isPriv) {
+            query = query.eq('id', currentUser?.id || '');
+        } else {
+            query = query.eq('ativo', true);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -380,7 +738,9 @@ function renderLavadoresSelect(select, list, currentVal) {
         list.map(l => {
             const displayName = l.nome || l.email || 'Lavador';
             const roleLabel = ROLE_LABELS[l.role] || l.role || 'Lavador';
-            return `<option value="${l.id}" data-taxa="${l.taxa_carro || 0}" data-pct="${l.comissao_pct || 0}">${displayName} (${roleLabel})</option>`;
+            const nameSafe = typeof escapeHtml === 'function' ? escapeHtml(displayName) : String(displayName);
+            const roleSafe = typeof escapeHtml === 'function' ? escapeHtml(roleLabel) : String(roleLabel);
+            return `<option value="${l.id}" data-taxa="${l.taxa_carro || 0}" data-pct="${l.comissao_pct || 0}">${nameSafe} (${roleSafe})</option>`;
         }).join('');
 
     if (currentVal) select.value = currentVal;

@@ -1,6 +1,6 @@
 // --- STATE & CONSTANTS ---
 const DB_NAME = 'LavaCarDB';
-const DB_VERSION = 3;
+const DB_VERSION = 6;
 let db;
 let currentTab = 'dashboard';
 let currentReportTab = 'daily';
@@ -52,4 +52,14 @@ let isAudioRecording = false;
 
 let currentInspectionMedia = [];
 let damagePoints = [];
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+}
 

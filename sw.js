@@ -1,7 +1,10 @@
-const CACHE_NAME = 'lavacar-pwa-v7';
+const CACHE_NAME = 'lavacar-pwa-v20';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './offline.html',
+  './manifest.webmanifest',
+  './icons/icon.svg',
   './css/style.css',
   './js/core.js',
   './js/auth.js',
@@ -15,11 +18,7 @@ const ASSETS_TO_CACHE = [
   './js/clients.js',
   './js/reports.js',
   './js/products.js',
-  './js/main.js',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css',
-  'https://unpkg.com/idb@7/build/umd.js',
-  'https://unpkg.com/lucide@latest'
+  './js/main.js'
 ];
 
 // Install Event
@@ -70,16 +69,16 @@ self.addEventListener('fetch', (event) => {
       }
 
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+        if (!networkResponse) return networkResponse;
+        if (networkResponse.status === 200 || networkResponse.type === 'opaque') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         return networkResponse;
       }).catch(() => {
         // Fallback response for offline if HTML requested
         if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('./index.html');
+          return caches.match('./offline.html') || caches.match('./index.html');
         }
       });
     })

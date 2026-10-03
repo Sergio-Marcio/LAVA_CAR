@@ -12,3 +12,13 @@ Thumbs.db
 # Dependências e builds (futuro)
 node_modules/
 dist/
+
+# Vitest
+.vitest/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
