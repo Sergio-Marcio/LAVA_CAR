@@ -412,6 +412,8 @@ async function loadSeedData() {
         checklist: { chave: true, portamalas: true, documentos: true, estepe: true },
         danos_mapa: [],
         observacoes: 'Cliente solicitou atenção especial nas caixas de roda.',
+        sync_id: novoSyncId(),
+        local_revision: 1,
         synced: false
     });
 
@@ -424,6 +426,7 @@ async function loadSeedData() {
 // --- SUPABASE SYNC (usa sessão autenticada de js/auth.js) ---
 function mapProcessoToCloud(p) {
     return {
+        ...(p.sync_id ? { sync_id: p.sync_id } : {}),
         placa: p.placa,
         cliente_nome: p.cliente_nome,
         modelo: p.modelo || null,
@@ -459,6 +462,7 @@ function mapProcessoToCloud(p) {
 function mapProcessoFromCloud(row) {
     return {
         cloud_id: row.id,
+        sync_id: row.sync_id || null,
         cloud_updated_at: row.updated_at || null,
         veiculo_id: row.veiculo_id ?? null,
         cliente_id: row.cliente_id ?? null,
@@ -757,7 +761,7 @@ async function pullCloudProcessos(opts) {
     while (true) {
         let q = sbClient
             .from('processos')
-            .select('id, updated_at, veiculo_id, cliente_id, placa, cliente_nome, modelo, data_entrada, data_saida, status, lavagem_id, lavagem_nome, lavagem_preco, valor_lavagem, valor_adicionais, valor_total, forma_pagamento, observacoes, checklist, danos_mapa, servicos_adicionais, data_estorno, motivo_estorno, valor_estornado, lavador_id, lavador_nome, comissao_valor, etapa, etapas_historico, box_id, box_nome, cura_fim_em, qa_checklist')
+            .select('id, sync_id, updated_at, veiculo_id, cliente_id, placa, cliente_nome, modelo, data_entrada, data_saida, status, lavagem_id, lavagem_nome, lavagem_preco, valor_lavagem, valor_adicionais, valor_total, forma_pagamento, observacoes, checklist, danos_mapa, servicos_adicionais, data_estorno, motivo_estorno, valor_estornado, lavador_id, lavador_nome, comissao_valor, etapa, etapas_historico, box_id, box_nome, cura_fim_em, qa_checklist')
             .order('updated_at', { ascending: true })
             .order('id', { ascending: true })
             .limit(pageSize);
@@ -779,20 +783,23 @@ async function pullCloudProcessos(opts) {
         const tx = db.transaction('processos', 'readwrite');
         const store = tx.objectStore('processos');
         const idx = hasCloudIdIndex ? store.index('cloud_id') : null;
+        const syncIdx = typeof store.indexNames?.contains === 'function' && store.indexNames.contains('sync_id')
+            ? store.index('sync_id') : null;
 
         for (const row of rows) {
             const cloudId = row.id;
             if (cloudId == null) continue;
 
-            const existing = idx ? await idx.get(cloudId) : byCloudId.get(cloudId);
+            let existing = idx ? await idx.get(cloudId) : byCloudId.get(cloudId);
+            // Insert anterior gravou na nuvem mas a resposta se perdeu: reconcilia pelo UUID em vez de duplicar localmente
+            if (!existing && row.sync_id && syncIdx) existing = await syncIdx.get(row.sync_id);
             const mapped = mapProcessoFromCloud(row);
 
             if (existing && existing.id != null) {
-                const updated = {
-                    ...existing,
-                    ...mapped,
-                    id: existing.id
-                };
+                // Alteração local ainda não enviada tem prioridade; só herda os identificadores da nuvem
+                const updated = existing.synced === false
+                    ? { ...existing, cloud_id: cloudId, sync_id: existing.sync_id || mapped.sync_id, cloud_updated_at: mapped.cloud_updated_at }
+                    : { ...existing, ...mapped, id: existing.id };
                 await store.put(updated);
                 if (!idx) byCloudId.set(cloudId, updated);
             } else {
@@ -823,6 +830,8 @@ async function pullCloudProcessos(opts) {
     return { merged, pages };
 }
 
+let syncEmAndamento = false;
+
 async function triggerManualSync(opts) {
     opts = opts || {};
     const allowCurrentUserPushOnly = opts.allowCurrentUserPushOnly === true;
@@ -836,6 +845,11 @@ async function triggerManualSync(opts) {
         if (!silentErrors) showToast('A sincronização com nuvem é restrita ao gerente.', 'warning');
         return;
     }
+    if (syncEmAndamento) {
+        if (!silentErrors) showToast('Sincronização já em andamento...', 'info');
+        return;
+    }
+    syncEmAndamento = true;
     if (!silentErrors) showToast('Sincronizando com nuvem...', 'info');
 
     try {
@@ -860,47 +874,57 @@ async function triggerManualSync(opts) {
 
         if (!silentErrors) showToast(`Fila de sync: ${toInsert.length} novo(s), ${toUpdate.length} atualização(ões)`, 'info');
 
-        const syncedLocalIds = new Set();
-
-        if (toInsert.length) {
-            const payloadInsert = toInsert.map(mapProcessoToCloud);
-            const { data: inserted, error } = await sbClient
-                .from('processos')
-                .insert(payloadInsert)
-                .select('id');
-            if (error) throw new Error(error.message);
-
+        // Confirma o envio sem perder edições feitas durante a requisição (local_revision mudou => continua pendente)
+        const confirmarEnviados = async (enviados, cloudIdPorLocal = new Map()) => {
             const tx = db.transaction('processos', 'readwrite');
-            for (let i = 0; i < toInsert.length; i++) {
-                const p = toInsert[i];
-                const row = inserted?.[i];
-                if (row?.id) p.cloud_id = row.id;
-                if (p.cloud_id) {
-                    p.synced = true;
-                    await tx.store.put(p);
-                    syncedLocalIds.add(p.id);
-                }
+            for (const p of enviados) {
+                const current = await tx.store.get(p.id);
+                if (!current) continue;
+                const cloudId = cloudIdPorLocal.get(p.id) ?? current.cloud_id ?? p.cloud_id;
+                if (cloudId != null) current.cloud_id = cloudId;
+                if (!current.sync_id && p.sync_id) current.sync_id = p.sync_id;
+                if ((current.local_revision || 0) === (p.local_revision || 0) && current.cloud_id != null) current.synced = true;
+                await tx.store.put(current);
             }
             await tx.done;
+        };
+
+        if (toInsert.length) {
+            const semId = toInsert.filter(p => !p.sync_id);
+            if (semId.length) {
+                const tx = db.transaction('processos', 'readwrite');
+                for (const p of semId) {
+                    p.sync_id = novoSyncId();
+                    const current = await tx.store.get(p.id);
+                    if (current) { current.sync_id = current.sync_id || p.sync_id; p.sync_id = current.sync_id; await tx.store.put(current); }
+                }
+                await tx.done;
+            }
+
+            // upsert por sync_id: reenvio após falha de rede não duplica a ordem na nuvem
+            const { data: inserted, error } = await sbClient
+                .from('processos')
+                .upsert(toInsert.map(mapProcessoToCloud), { onConflict: 'sync_id' })
+                .select('id, sync_id');
+            if (error) throw new Error(error.message);
+
+            const cloudPorSync = new Map((inserted || []).map(r => [r.sync_id, r.id]));
+            const cloudIdPorLocal = new Map();
+            toInsert.forEach(p => { if (cloudPorSync.has(p.sync_id)) cloudIdPorLocal.set(p.id, cloudPorSync.get(p.sync_id)); });
+            await confirmarEnviados(toInsert, cloudIdPorLocal);
         }
 
         if (toUpdate.length) {
+            const enviados = [];
             for (const p of toUpdate) {
                 const { error } = await sbClient
                     .from('processos')
                     .update(mapProcessoToCloud(p))
                     .eq('id', p.cloud_id);
                 if (error) throw new Error(error.message);
-                syncedLocalIds.add(p.id);
+                enviados.push(p);
             }
-
-            const tx = db.transaction('processos', 'readwrite');
-            for (const p of toUpdate) {
-                if (!syncedLocalIds.has(p.id)) continue;
-                p.synced = true;
-                await tx.store.put(p);
-            }
-            await tx.done;
+            await confirmarEnviados(enviados);
         }
 
         loadDashboardData();
@@ -929,7 +953,7 @@ async function triggerManualSync(opts) {
 
         try { localStorage.setItem('lavacar_ultima_sincronia', new Date().toISOString()); } catch (_) {}
         try { _atualizarBadgeSincronia(); } catch (_) {}
-        if (!silentErrors) showToast(`${syncedLocalIds.size} processo(s) sincronizado(s) com a nuvem!`, 'success');
+        if (!silentErrors) showToast(`${pendentes.length} processo(s) sincronizado(s) com a nuvem!`, 'success');
     } catch (err) {
         console.error('Sync error:', err);
         const raw = (err && (err.message || err.error_description || err.toString)) ? (err.message || err.error_description || String(err)) : 'Erro desconhecido';
@@ -943,6 +967,8 @@ async function triggerManualSync(opts) {
                 showToast('Falha na sincronização: ' + msg, 'error');
             }
         }
+    } finally {
+        syncEmAndamento = false;
     }
 }
 
@@ -987,6 +1013,8 @@ async function testCloudSync() {
             observacoes: 'Registro criado automaticamente para teste de sincronização.',
             checklist: {},
             danos_mapa: [],
+            sync_id: novoSyncId(),
+            local_revision: 1,
             synced: false
         });
         await tx.done;
@@ -1023,7 +1051,7 @@ async function testCloudSync() {
         after.status = 'CONCLUIDO';
         after.data_saida = new Date().toISOString();
         after.forma_pagamento = 'PIX';
-        after.synced = false;
+        marcarPendente(after);
         await db.put('processos', after);
 
         await triggerManualSync();
@@ -1185,6 +1213,19 @@ async function clearAllData() {
 }
 
 // --- REFUND (ESTORNO) FLOW ---
+// Retorna mensagem de erro ou null. Ordem paga: 0 < valor <= total. Ordem não paga: cancelamento com valor 0.
+function validarEstorno(proc, valor) {
+    if (!proc || !['CONCLUIDO', 'EM_ANDAMENTO'].includes(proc.status)) return 'Esta ordem não pode ser estornada.';
+    if (!Number.isFinite(valor)) return 'Valor do estorno inválido para esta ordem.';
+    const total = Number(proc.valor_total || 0);
+    if (proc.data_saida ? (valor <= 0 || valor > total + 0.005) : valor !== 0) {
+        return proc.data_saida
+            ? `O estorno deve ser maior que zero e no máximo R$ ${total.toFixed(2)}.`
+            : 'Ordem ainda não paga: o cancelamento deve ter valor R$ 0,00.';
+    }
+    return null;
+}
+
 async function openModalRefund(id) {
     const proc = await db.get('processos', id);
     if (!proc) return;
@@ -1193,7 +1234,7 @@ async function openModalRefund(id) {
     document.getElementById('ref-placa').textContent = toUpper(proc.placa);
     document.getElementById('ref-cliente').textContent = toUpper(proc.cliente_nome);
     document.getElementById('ref-valor-orig').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
-    document.getElementById('ref-valor').value = (proc.valor_total || 0).toFixed(2);
+    document.getElementById('ref-valor').value = proc.data_saida ? (proc.valor_total || 0).toFixed(2) : '0.00';
     document.getElementById('ref-motivo').value = '';
 
     document.getElementById('modal-refund').classList.remove('hidden');
@@ -1208,17 +1249,24 @@ async function confirmRefundService() {
     const motivo = document.getElementById('ref-motivo').value.trim();
     const valorEstorno = parseFloat(document.getElementById('ref-valor').value);
 
-    if (!id || !motivo || isNaN(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
+    if (!id || !motivo || !Number.isFinite(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
 
     const tx = db.transaction('processos', 'readwrite');
     const proc = await tx.store.get(id);
 
     if (proc) {
+        const erro = validarEstorno(proc, valorEstorno);
+        if (erro) {
+            await tx.done;
+            return showToast(erro, 'error');
+        }
         proc.status = 'CANCELADO';
         proc.data_estorno = new Date().toISOString();
         proc.motivo_estorno = motivo;
         proc.valor_estornado = valorEstorno;
-        proc.synced = false;
+        (proc.etapas_historico || []).forEach(h => { if (!h.fim) h.fim = proc.data_estorno; });
+        proc.cura_fim_em = null;
+        marcarPendente(proc);
         await tx.store.put(proc);
         await tx.done;
 

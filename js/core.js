@@ -1,6 +1,6 @@
 // --- STATE & CONSTANTS ---
 const DB_NAME = 'LavaCarDB';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 let db;
 let currentTab = 'dashboard';
 let currentReportTab = 'daily';
@@ -17,6 +17,24 @@ let simSelectedExtraIds = new Set();
 // --- FORMATTING ---
 function toUpper(value) {
     return (value ?? '').toString().toLocaleUpperCase('pt-BR');
+}
+
+// --- IDENTIDADE E REVISÃO LOCAL PARA SINCRONIZAÇÃO ---
+function novoSyncId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+function marcarPendente(p) {
+    p.synced = false;
+    p.local_revision = (p.local_revision || 0) + 1;
+    if (!p.sync_id) p.sync_id = novoSyncId();
+    return p;
 }
 
 // --- TOAST NOTIFICATIONS ---

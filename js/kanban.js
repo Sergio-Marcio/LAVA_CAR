@@ -61,16 +61,15 @@ function aplicarMovimentoEtapa(p, novaEtapa, opts = {}) {
 
     const usaBox = novaEtapa === 'LAVAGEM' || novaEtapa === 'ESTETICA';
 
-    return {
+    return marcarPendente({
         ...p,
         etapa: novaEtapa,
         etapas_historico: historico,
         box_id: usaBox ? (opts.box?.id ?? null) : null,
         box_nome: usaBox ? (opts.box?.nome ?? null) : null,
         cura_fim_em: curaFim,
-        cura_alertado: false,
-        synced: false
-    };
+        cura_alertado: false
+    });
 }
 
 function curaRestanteMs(p, agoraMs) {

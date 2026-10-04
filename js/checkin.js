@@ -104,6 +104,8 @@ async function saveInspectionRDP() {
 
     // Processo (Entrada)
     const processoId = await tx.objectStore('processos').add({
+        sync_id: novoSyncId(),
+        local_revision: 1,
         veiculo_id: veiculoId,
         cliente_id: clienteId,
         placa: placa,

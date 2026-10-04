@@ -9,10 +9,8 @@ async function loadDashboardData() {
     const completed = all.filter(p => p.status === 'CONCLUIDO').length;
 
     // Faturamento Hoje
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayRevenue = all
-        .filter(p => p.status === 'CONCLUIDO' && p.data_saida && p.data_saida.startsWith(todayStr))
-        .reduce((acc, curr) => acc + (curr.valor_total || 0), 0);
+    const todayStr = localDateKey(new Date());
+    const todayRevenue = resumoFinanceiro(financialEvents(all).filter(e => localDateKey(e.date) === todayStr)).net;
 
     document.getElementById('stat-pending').textContent = pending;
     document.getElementById('stat-completed').textContent = completed;
@@ -157,7 +155,7 @@ async function confirmCheckout() {
         proc.forma_pagamento = formaPagamento;
         (proc.etapas_historico || []).forEach(h => { if (!h.fim) h.fim = proc.data_saida; });
         proc.cura_fim_em = null;
-        proc.synced = false;
+        marcarPendente(proc);
         await tx.store.put(proc);
         await tx.done;
 

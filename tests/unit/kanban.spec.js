@@ -11,6 +11,8 @@ function loadKanban() {
     globalThis.escapeHtml = escapeHtml;
     globalThis.toUpper = toUpper;
     globalThis.showToast = showToast;
+    globalThis.novoSyncId = novoSyncId;
+    globalThis.marcarPendente = marcarPendente;
   `);
   requireInJsdom(KANBAN_PATH, `
     window.__k = {

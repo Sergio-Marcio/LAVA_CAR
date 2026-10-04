@@ -1,4 +1,68 @@
 // --- REPORT SUB-TABS & CALCULATIONS ---
+function localDateKey(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Cada ordem gera eventos financeiros datados: pagamento (data_saida) e estorno/cancelamento (data_estorno).
+// Ordem paga e depois estornada conta a venda no dia do pagamento e o estorno no dia do estorno.
+function financialEvents(processos) {
+    return (processos || []).flatMap(p => {
+        const events = [];
+        if (p.data_saida && ['CONCLUIDO', 'CANCELADO'].includes(p.status)) {
+            events.push({ processo: p, date: p.data_saida, kind: 'sale', amount: Number(p.valor_total || 0) });
+        }
+        if (p.status === 'CANCELADO' && p.data_estorno) {
+            events.push({
+                processo: p,
+                date: p.data_estorno,
+                kind: p.data_saida ? 'refund' : 'cancel',
+                amount: p.data_saida ? Number(p.valor_estornado ?? p.valor_total ?? 0) : 0
+            });
+        }
+        return events;
+    });
+}
+
+function resumoFinanceiro(events) {
+    const r = { gross: 0, refunds: 0, count: 0, pix: 0, credit: 0, debit: 0, cash: 0 };
+    events.forEach(e => {
+        if (e.kind === 'sale') {
+            r.gross += e.amount;
+            r.count++;
+            const fp = e.processo.forma_pagamento;
+            if (fp === 'PIX') r.pix += e.amount;
+            else if (fp === 'CARTAO_CREDITO') r.credit += e.amount;
+            else if (fp === 'CARTAO_DEBITO') r.debit += e.amount;
+            else if (fp === 'DINHEIRO') r.cash += e.amount;
+        } else if (e.kind === 'refund') {
+            r.refunds += e.amount;
+        }
+    });
+    r.net = r.gross - r.refunds;
+    return r;
+}
+
+const EVENT_LABEL = { sale: 'PAGAMENTO', refund: 'ESTORNO', cancel: 'CANCELAMENTO' };
+
+function renderEventRow({ processo: p, kind, amount, date }, showDate) {
+    return `
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono font-bold text-slate-900 dark:text-white">${escapeHtml(toUpper(p.placa))}</span>
+                    <span>• ${escapeHtml(toUpper(p.cliente_nome))}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${kind === 'sale' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${EVENT_LABEL[kind]}</span>
+                    ${showDate ? `<span class="text-[10px] text-slate-400 w-full">${new Date(date).toLocaleString('pt-BR')}</span>` : ''}
+                </div>
+                <div class="text-right">
+                    <span class="font-mono font-bold ${kind === 'sale' ? 'text-emerald-600' : 'text-rose-600'}">${kind === 'refund' ? '-' : ''}R$ ${amount.toFixed(2)}</span>
+                    ${kind === 'sale' && p.forma_pagamento ? `<span class="block text-[10px] text-slate-400">${escapeHtml(p.forma_pagamento)}</span>` : ''}
+                </div>
+            </div>`;
+}
+
 function switchReportTab(subTab) {
     currentReportTab = subTab;
     ['daily', 'monthly', 'products', 'commissions'].forEach(s => {
@@ -20,37 +84,10 @@ function switchReportTab(subTab) {
 }
 
 async function loadDailyReport() {
-    const selectedDate = document.getElementById('rep-daily-date').value || new Date().toISOString().split('T')[0];
+    const selectedDate = document.getElementById('rep-daily-date').value || localDateKey(new Date());
     const all = await db.getAll('processos');
-
-    const dayProc = all.filter(p => {
-        const entDate = p.data_entrada ? p.data_entrada.split('T')[0] : '';
-        const exitDate = p.data_saida ? p.data_saida.split('T')[0] : '';
-        const estDate = p.data_estorno ? p.data_estorno.split('T')[0] : '';
-        return entDate === selectedDate || exitDate === selectedDate || estDate === selectedDate;
-    });
-
-    let gross = 0;
-    let refunds = 0;
-    let count = 0;
-
-    let pix = 0, credit = 0, debit = 0, cash = 0;
-
-    dayProc.forEach(p => {
-        if (p.status === 'CONCLUIDO') {
-            const v = p.valor_total || 0;
-            gross += v;
-            count++;
-            if (p.forma_pagamento === 'PIX') pix += v;
-            else if (p.forma_pagamento === 'CARTAO_CREDITO') credit += v;
-            else if (p.forma_pagamento === 'CARTAO_DEBITO') debit += v;
-            else if (p.forma_pagamento === 'DINHEIRO') cash += v;
-        } else if (p.status === 'CANCELADO') {
-            refunds += (p.valor_estornado || p.valor_total || 0);
-        }
-    });
-
-    const net = gross - refunds;
+    const dayEvents = financialEvents(all).filter(e => localDateKey(e.date) === selectedDate);
+    const { gross, refunds, net, count, pix, credit, debit, cash } = resumoFinanceiro(dayEvents);
 
     document.getElementById('daily-gross').textContent = `R$ ${gross.toFixed(2)}`;
     document.getElementById('daily-refunds').textContent = `R$ ${refunds.toFixed(2)}`;
@@ -63,49 +100,18 @@ async function loadDailyReport() {
     document.getElementById('pay-cash').textContent = `R$ ${cash.toFixed(2)}`;
 
     const listEl = document.getElementById('daily-tx-list');
-    if (dayProc.length === 0) {
+    if (dayEvents.length === 0) {
         listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Nenhuma transação registrada nesta data.</p>`;
     } else {
-        listEl.innerHTML = dayProc.map(p => `
-            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
-                <div class="flex items-center gap-2">
-                    <span class="font-mono font-bold text-slate-900 dark:text-white">${toUpper(p.placa)}</span>
-                    <span>• ${toUpper(p.cliente_nome)}</span>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${p.status === 'CONCLUIDO' ? 'bg-emerald-100 text-emerald-800' : p.status === 'CANCELADO' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${p.status}</span>
-                </div>
-                <div class="text-right">
-                    <span class="font-mono font-bold ${p.status === 'CANCELADO' ? 'text-rose-600 line-through' : 'text-emerald-600'}">R$ ${(p.valor_total || 0).toFixed(2)}</span>
-                    ${p.forma_pagamento ? `<span class="block text-[10px] text-slate-400">${p.forma_pagamento}</span>` : ''}
-                </div>
-            </div>
-        `).join('');
+        listEl.innerHTML = dayEvents.map(e => renderEventRow(e, false)).join('');
     }
 }
 
 async function loadMonthlyReport() {
-    const selectedMonth = document.getElementById('rep-monthly-month').value || new Date().toISOString().substring(0, 7);
+    const selectedMonth = document.getElementById('rep-monthly-month').value || localDateKey(new Date()).substring(0, 7);
     const all = await db.getAll('processos');
-
-    const monthProc = all.filter(p => {
-        const entMonth = p.data_entrada ? p.data_entrada.substring(0, 7) : '';
-        const exitMonth = p.data_saida ? p.data_saida.substring(0, 7) : '';
-        return entMonth === selectedMonth || exitMonth === selectedMonth;
-    });
-
-    let gross = 0;
-    let refunds = 0;
-    let count = 0;
-
-    monthProc.forEach(p => {
-        if (p.status === 'CONCLUIDO') {
-            gross += (p.valor_total || 0);
-            count++;
-        } else if (p.status === 'CANCELADO') {
-            refunds += (p.valor_estornado || p.valor_total || 0);
-        }
-    });
-
-    const net = gross - refunds;
+    const monthEvents = financialEvents(all).filter(e => localDateKey(e.date).startsWith(selectedMonth));
+    const { gross, refunds, net, count } = resumoFinanceiro(monthEvents);
     const avg = count > 0 ? (gross / count) : 0;
 
     document.getElementById('monthly-gross').textContent = `R$ ${gross.toFixed(2)}`;
@@ -114,36 +120,20 @@ async function loadMonthlyReport() {
     document.getElementById('monthly-avg').textContent = `R$ ${avg.toFixed(2)}`;
 
     const listEl = document.getElementById('monthly-summary-list');
-    if (monthProc.length === 0) {
+    if (monthEvents.length === 0) {
         listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Nenhum atendimento registrado neste mês.</p>`;
     } else {
-        listEl.innerHTML = monthProc.map(p => `
-            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border flex items-center justify-between text-xs">
-                <div>
-                    <strong class="font-mono text-slate-900 dark:text-white">${toUpper(p.placa)}</strong> - ${toUpper(p.cliente_nome)}
-                    <span class="text-[10px] text-slate-400 block">${new Date(p.data_entrada).toLocaleString('pt-BR')}</span>
-                </div>
-                <div class="text-right">
-                    <span class="font-mono font-bold ${p.status === 'CANCELADO' ? 'text-rose-600 line-through' : 'text-emerald-600'}">R$ ${(p.valor_total || 0).toFixed(2)}</span>
-                    <span class="block text-[10px] text-slate-400">${p.status}</span>
-                </div>
-            </div>
-        `).join('');
+        listEl.innerHTML = monthEvents.map(e => renderEventRow(e, true)).join('');
     }
 }
 
 // --- COMMISSIONS REPORT ---
 async function loadCommissionsReport() {
-    const selectedMonth = document.getElementById('rep-comm-month').value || new Date().toISOString().substring(0, 7);
+    const selectedMonth = document.getElementById('rep-comm-month').value || localDateKey(new Date()).substring(0, 7);
     const all = await db.getAll('processos');
 
-    const monthProc = all.filter(p => {
-        const entMonth = p.data_entrada ? p.data_entrada.substring(0, 7) : '';
-        const exitMonth = p.data_saida ? p.data_saida.substring(0, 7) : '';
-        return (entMonth === selectedMonth || exitMonth === selectedMonth)
-            && p.lavador_id
-            && p.status === 'CONCLUIDO';
-    });
+    const monthProc = all.filter(p => p.status === 'CONCLUIDO' && p.lavador_id
+        && localDateKey(p.data_saida).startsWith(selectedMonth));
 
     const porLavador = {};
     monthProc.forEach(p => {
@@ -190,10 +180,10 @@ async function loadCommissionsReport() {
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm bg-brand-600">
-                    ${(l.nome || '?').charAt(0).toUpperCase()}
+                    ${escapeHtml((l.nome || '?').charAt(0).toUpperCase())}
                 </div>
                 <div>
-                    <h5 class="font-bold text-sm text-slate-900 dark:text-white">${l.nome}</h5>
+                    <h5 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(l.nome)}</h5>
                     <p class="text-[11px] text-slate-500">${l.carros} carro(s) • R$ ${l.totalServicos.toFixed(2)} em serviços</p>
                 </div>
             </div>

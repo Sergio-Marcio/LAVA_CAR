@@ -21,6 +21,10 @@ async function initDB() {
                         pStore.createIndex('cloud_id', 'cloud_id', { unique: true });
                     }
                 }
+                const procStore = transaction.objectStore('processos');
+                if (!procStore.indexNames.contains('sync_id')) {
+                    procStore.createIndex('sync_id', 'sync_id');
+                }
                 if (!db.objectStoreNames.contains('registros_midia')) {
                     const mStore = db.createObjectStore('registros_midia', { keyPath: 'id', autoIncrement: true });
                     mStore.createIndex('processo_id', 'processo_id');
