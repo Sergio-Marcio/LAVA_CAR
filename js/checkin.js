@@ -1,6 +1,6 @@
 // --- REVISION SUMMARY ---
 async function updateReviewSummary() {
-    const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+    const placa = normalizePlaca(document.getElementById('inp-placa').value);
     const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
     const allServices = await db.getAll('servicos');
 
@@ -28,19 +28,28 @@ async function updateReviewSummary() {
     document.getElementById('rev-extras').textContent = extraNames.length ? extraNames.join(', ') : 'Nenhum';
     document.getElementById('rev-total').textContent = `R$ ${total.toFixed(2)}`;
 
-    const rawData = `${placa}-${cliente}-${total}-${Date.now()}`;
-    const msgUint8 = new TextEncoder().encode(rawData);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    document.getElementById('rev-hash').textContent = `SHA256:${hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32)}...`;
+    const preview = await computeInspectionHash({
+        placa,
+        cliente,
+        valor_total: total,
+        checklist: readChecklist(),
+        danos: damagePoints,
+        midias_sha256: currentInspectionMedia.map(m => m.metadata?.sha256).filter(Boolean)
+    });
+    document.getElementById('rev-hash').textContent = `SHA256:${preview.substring(0, 32)}... (final calculado com a assinatura)`;
 }
 
 // --- SAVE NEW ENTRADA (CHECK-IN) ---
 async function saveInspectionRDP() {
-    const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+    const placa = normalizePlaca(document.getElementById('inp-placa').value);
     const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
     const modelo = toUpper(document.getElementById('inp-modelo').value.trim());
     const telefone = document.getElementById('inp-telefone').value.trim();
+    const cor = toUpper(document.getElementById('inp-cor')?.value.trim() || '');
+    const ano = parseInt(document.getElementById('inp-ano')?.value, 10) || null;
+    const vin = normalizeVin(document.getElementById('inp-vin')?.value || '');
+    const km = parseInt(document.getElementById('inp-km')?.value, 10);
+    const combustivel = document.getElementById('inp-combustivel')?.value || null;
     const obs = document.getElementById('inp-obs').value.trim();
 
     // Lavador responsável e comissão
@@ -52,6 +61,14 @@ async function saveInspectionRDP() {
 
     if (!placa || !cliente || !selectedWashId) return showToast('Preencha os campos obrigatórios', 'error');
     if (!lavadorId) return showToast('Selecione o Lavador Responsável', 'error');
+    if (!isPlacaValida(placa)) return showToast('Placa inválida. Use ABC1234 ou ABC1D23 (Mercosul).', 'error');
+    if (vin && !isVinValido(vin)) return showToast('Chassi (VIN) inválido.', 'error');
+
+    const assinaturaBlob = await getSignatureBlob();
+    if (!assinaturaBlob) return showToast('Colete a assinatura do cliente para confirmar a vistoria.', 'error');
+    const assinaturaSha = await sha256Hex(assinaturaBlob);
+    const checklist = readChecklist();
+    const dataEntrada = new Date().toISOString();
 
     const allServices = await db.getAll('servicos');
     const wash = allServices.find(s => s.id === selectedWashId);
@@ -71,7 +88,19 @@ async function saveInspectionRDP() {
     // Apura comissão: taxa fixa por carro + % sobre o valor do serviço
     const comissaoValor = taxaCarro + (valorTotal * comissaoPct / 100);
 
-    const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia'], 'readwrite');
+    const midiasSha = currentInspectionMedia.map(m => m.metadata?.sha256).filter(Boolean);
+    const hashIntegridade = await computeInspectionHash({
+        placa,
+        cliente,
+        data_entrada: dataEntrada,
+        valor_total: valorTotal,
+        checklist,
+        danos: damagePoints,
+        midias_sha256: midiasSha,
+        assinatura_sha256: assinaturaSha
+    });
+
+    const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'sync_queue'], 'readwrite');
 
     // Cliente
     let clienteId;
@@ -90,26 +119,40 @@ async function saveInspectionRDP() {
     // Veículo
     let veiculoId;
     const veiculoStore = tx.objectStore('veiculos');
-    const foundVehicle = await veiculoStore.index('placa').get(placa);
+    const allVehicles = await veiculoStore.getAll();
+    const foundVehicle = allVehicles.find(v => normalizePlaca(v.placa) === placa);
     if (foundVehicle) {
         veiculoId = foundVehicle.id;
+        await veiculoStore.put({
+            ...foundVehicle,
+            modelo: modelo || foundVehicle.modelo,
+            cor: cor || foundVehicle.cor || null,
+            ano: ano || foundVehicle.ano || null,
+            vin: vin || foundVehicle.vin || null
+        });
     } else {
         veiculoId = await veiculoStore.add({
             placa: placa,
             modelo: modelo || 'GERAL',
+            cor: cor || null,
+            ano,
+            vin: vin || null,
             cliente_id: clienteId,
-            criado_em: new Date().toISOString()
+            criado_em: dataEntrada
         });
     }
 
     // Processo (Entrada)
-    const processoId = await tx.objectStore('processos').add({
+    const processoId = await saveProcessoMutation(tx, {
         veiculo_id: veiculoId,
         cliente_id: clienteId,
         placa: placa,
         cliente_nome: cliente,
         modelo: modelo,
-        data_entrada: new Date().toISOString(),
+        veiculo_cor: cor || null,
+        veiculo_ano: ano,
+        veiculo_vin: vin || null,
+        data_entrada: dataEntrada,
         data_saida: null,
         status: 'EM_ANDAMENTO',
         lavagem: wash ? { id: wash.id, nome: wash.nome, preco: wash.preco } : null,
@@ -121,15 +164,32 @@ async function saveInspectionRDP() {
         lavador_id: lavadorId,
         lavador_nome: lavadorNome,
         comissao_valor: comissaoValor,
-        checklist: {
-            chave: document.getElementById('chk-chave').checked,
-            portamalas: document.getElementById('chk-portamalas').checked,
-            documentos: document.getElementById('chk-documentos').checked,
-            estepe: document.getElementById('chk-estepe').checked
-        },
+        checklist,
         danos_mapa: damagePoints,
         observacoes: obs,
+        hash_integridade: hashIntegridade,
+        vistoria: {
+            km: Number.isNaN(km) ? null : km,
+            combustivel,
+            geo: currentInspectionGeo,
+            assinatura_sha256: assinaturaSha,
+            assinada_em: dataEntrada,
+            midias_sha256: midiasSha
+        },
         synced: false
+    }, 'INSERT');
+
+    await tx.objectStore('registros_midia').add({
+        processo_id: processoId,
+        tipo: 'ASSINATURA',
+        nome: `Assinatura_${placa}.png`,
+        blob: assinaturaBlob,
+        mime_type: 'image/png',
+        sha256: assinaturaSha,
+        caminho_arquivo: null,
+        cloud_media_id: null,
+        synced: false,
+        criado_em: dataEntrada
     });
 
     // Mídias
@@ -140,6 +200,9 @@ async function saveInspectionRDP() {
             nome: media.nome,
             blob: media.blob || null,
             mime_type: media.blob?.type || null,
+            sha256: media.metadata?.sha256 || null,
+            metadata: media.metadata || null,
+            avaria_index: typeof media.avaria_index === 'number' ? media.avaria_index : null,
             caminho_arquivo: null,
             cloud_media_id: null,
             synced: false,
@@ -174,6 +237,11 @@ function resetRdpForm() {
     }
     currentInspectionMedia = [];
     damagePoints = [];
+    currentInspectionGeo = null;
+    clearSignature();
+    const historyEl = document.getElementById('placa-historico');
+    if (historyEl) historyEl.innerHTML = '';
+    setPlacaFeedback('', 'ok');
     selectedWashId = null;
     selectedExtraIds.clear();
     renderMediaGallery();

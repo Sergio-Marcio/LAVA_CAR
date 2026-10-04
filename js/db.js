@@ -15,11 +15,24 @@ async function initDB() {
                     pStore.createIndex('status', 'status');
                     pStore.createIndex('placa', 'placa');
                     pStore.createIndex('cloud_id', 'cloud_id', { unique: true });
+                    pStore.createIndex('sync_id', 'sync_id', { unique: true });
                 } else {
                     const pStore = transaction.objectStore('processos');
                     if (!pStore.indexNames.contains('cloud_id')) {
                         pStore.createIndex('cloud_id', 'cloud_id', { unique: true });
                     }
+                    if (!pStore.indexNames.contains('sync_id')) {
+                        pStore.openCursor().then(function backfill(cursor) {
+                            if (!cursor) return;
+                            if (!cursor.value.sync_id) cursor.update({ ...cursor.value, sync_id: newSyncId() });
+                            return cursor.continue().then(backfill);
+                        });
+                        pStore.createIndex('sync_id', 'sync_id', { unique: true });
+                    }
+                }
+                if (!db.objectStoreNames.contains('sync_queue')) {
+                    const qStore = db.createObjectStore('sync_queue', { keyPath: 'id', autoIncrement: true });
+                    qStore.createIndex('sync_id', 'sync_id');
                 }
                 if (!db.objectStoreNames.contains('registros_midia')) {
                     const mStore = db.createObjectStore('registros_midia', { keyPath: 'id', autoIncrement: true });

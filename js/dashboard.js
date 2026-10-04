@@ -9,10 +9,10 @@ async function loadDashboardData() {
     const completed = all.filter(p => p.status === 'CONCLUIDO').length;
 
     // Faturamento Hoje
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayRevenue = all
-        .filter(p => p.status === 'CONCLUIDO' && p.data_saida && p.data_saida.startsWith(todayStr))
-        .reduce((acc, curr) => acc + (curr.valor_total || 0), 0);
+    const todayStr = localDateKey(new Date());
+    const todayRevenue = financialEvents(all)
+        .filter(event => localDateKey(event.date) === todayStr)
+        .reduce((total, event) => total + (event.kind === 'sale' ? event.amount : -event.amount), 0);
 
     document.getElementById('stat-pending').textContent = pending;
     document.getElementById('stat-completed').textContent = completed;
@@ -147,15 +147,14 @@ async function confirmCheckout() {
     const id = parseInt(document.getElementById('co-processo-id').value);
     const formaPagamento = document.querySelector('input[name="pay-method"]:checked').value;
 
-    const tx = db.transaction('processos', 'readwrite');
-    const proc = await tx.store.get(id);
+    const tx = db.transaction(['processos', 'sync_queue'], 'readwrite');
+    const proc = await tx.objectStore('processos').get(id);
 
     if (proc) {
         proc.status = 'CONCLUIDO';
         proc.data_saida = new Date().toISOString();
         proc.forma_pagamento = formaPagamento;
-        proc.synced = false;
-        await tx.store.put(proc);
+        await saveProcessoMutation(tx, proc, 'CHECKOUT');
         await tx.done;
 
         closeModalCheckout();
@@ -241,11 +240,16 @@ async function viewDetails(id) {
         <div>
             <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Checklist RDP</h5>
             <div class="flex flex-wrap gap-2">
-                <span class="px-2 py-1 rounded text-xs ${proc.checklist?.chave ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Chave no contato</span>
-                <span class="px-2 py-1 rounded text-xs ${proc.checklist?.portamalas ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Pertences Porta-malas</span>
-                <span class="px-2 py-1 rounded text-xs ${proc.checklist?.documentos ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Documentos</span>
-                <span class="px-2 py-1 rounded text-xs ${proc.checklist?.estepe ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">Estepe</span>
+                ${CHECKLIST_ITEMS.filter(item => proc.checklist && item.key in proc.checklist).map(item => `<span class="px-2 py-1 rounded text-xs ${proc.checklist[item.key] ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">${esc(item.label)}</span>`).join('')}
             </div>
+        </div>
+
+        <div>
+            <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Avarias pré-existentes (${(proc.danos_mapa || []).length})</h5>
+            ${(proc.danos_mapa || []).length
+                ? proc.danos_mapa.map((d, i) => `<p class="text-xs">${i + 1}. ${esc(sectorLabel(d.setor))} • ${esc(damageTypeLabel(d.tipo))}${d.midia_sha256 ? ' • com foto' : ''}</p>`).join('')
+                : '<p class="text-xs text-slate-400">Nenhuma avaria registrada.</p>'}
+            ${proc.hash_integridade ? `<p class="text-[10px] font-mono text-slate-400 mt-1 break-all">SHA-256: ${esc(proc.hash_integridade)}</p>` : ''}
         </div>
 
         <div>
@@ -258,7 +262,7 @@ async function viewDetails(id) {
             <div class="grid grid-cols-3 gap-2">
                 ${midiasRender.map(m => {
                     if (m.missing) return `<div class="w-full h-20 rounded-lg bg-slate-200 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-center text-center px-2">Mídia indisponível</div>`;
-                    return m.tipo === 'FOTO'
+                    return m.tipo === 'FOTO' || m.tipo === 'ASSINATURA'
                         ? `<img src="${esc(m.renderUrl)}" class="w-full h-20 object-cover rounded-lg">`
                         : `<video src="${esc(m.renderUrl)}" controls class="w-full h-20 bg-black rounded-lg"></video>`;
                 }).join('')}
@@ -282,7 +286,9 @@ LAVAGEM    : ${proc.lavagem ? proc.lavagem.nome : 'Sem lavagem'}
 VALOR TOTAL: R$ ${(proc.valor_total || 0).toFixed(2)}
 PAGAMENTO  : ${proc.forma_pagamento || 'PENDENTE'}
 -----------------------------------
-Obrigado pela preferência!
+${proc.vistoria || proc.hash_integridade ? `${buildTermoVistoria(proc)}
+-----------------------------------
+` : ''}Obrigado pela preferência!
 ===================================
 `;
     }

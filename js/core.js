@@ -1,6 +1,6 @@
 // --- STATE & CONSTANTS ---
 const DB_NAME = 'LavaCarDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 let db;
 let currentTab = 'dashboard';
 let currentReportTab = 'daily';
@@ -17,6 +17,58 @@ let simSelectedExtraIds = new Set();
 // --- FORMATTING ---
 function toUpper(value) {
     return (value ?? '').toString().toLocaleUpperCase('pt-BR');
+}
+
+const PLACA_ANTIGA_RE = /^[A-Z]{3}[0-9]{4}$/;
+const PLACA_MERCOSUL_RE = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
+const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
+
+function normalizePlaca(value) {
+    return toUpper(value).replace(/[^A-Z0-9]/g, '');
+}
+
+function isPlacaValida(value) {
+    const placa = normalizePlaca(value);
+    return PLACA_ANTIGA_RE.test(placa) || PLACA_MERCOSUL_RE.test(placa);
+}
+
+function normalizeVin(value) {
+    return toUpper(value).replace(/[^A-Z0-9]/g, '');
+}
+
+function isVinValido(value) {
+    return VIN_RE.test(normalizeVin(value));
+}
+
+function newSyncId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// Marks a local processo as changed and records the mutation in sync_queue.
+// `tx` must include both 'processos' and 'sync_queue' stores.
+async function saveProcessoMutation(tx, proc, action) {
+    if (!proc.sync_id) proc.sync_id = newSyncId();
+    proc.local_revision = (proc.local_revision || 0) + 1;
+    proc.local_updated_at = new Date().toISOString();
+    proc.synced = false;
+    const pStore = tx.objectStore('processos');
+    const id = proc.id != null ? await pStore.put(proc) : await pStore.add(proc);
+    await tx.objectStore('sync_queue').add({
+        entity: 'processos',
+        sync_id: proc.sync_id,
+        action,
+        revision: proc.local_revision,
+        created_at: proc.local_updated_at,
+        retry_count: 0,
+        last_error: null
+    });
+    return id;
 }
 
 // --- TOAST NOTIFICATIONS ---

@@ -391,11 +391,11 @@ function quickStartRdpForClient(nome, placa, tel) {
 }
 
 async function loadSeedData() {
-    const tx = db.transaction(['clientes', 'veiculos', 'processos'], 'readwrite');
+    const tx = db.transaction(['clientes', 'veiculos', 'processos', 'sync_queue'], 'readwrite');
     const cId = await tx.objectStore('clientes').add({ nome: 'ANA PAULA SOUZA', telefone: '(11) 97777-6666', criado_em: new Date().toISOString() });
     const vId = await tx.objectStore('veiculos').add({ placa: 'BRA2E19', modelo: 'JEEP COMPASS', cliente_id: cId, criado_em: new Date().toISOString() });
 
-    await tx.objectStore('processos').add({
+    await saveProcessoMutation(tx, {
         veiculo_id: vId,
         cliente_id: cId,
         placa: 'BRA2E19',
@@ -413,7 +413,7 @@ async function loadSeedData() {
         danos_mapa: [],
         observacoes: 'Cliente solicitou atenção especial nas caixas de roda.',
         synced: false
-    });
+    }, 'INSERT');
 
     await tx.done;
     showToast('Dados demonstrativos carregados!', 'success');
@@ -424,6 +424,7 @@ async function loadSeedData() {
 // --- SUPABASE SYNC (usa sessão autenticada de js/auth.js) ---
 function mapProcessoToCloud(p) {
     return {
+        sync_id: p.sync_id,
         placa: p.placa,
         cliente_nome: p.cliente_nome,
         modelo: p.modelo || null,
@@ -446,12 +447,17 @@ function mapProcessoToCloud(p) {
         lavador_id: p.lavador_id || null,
         lavador_nome: p.lavador_nome || null,
         comissao_valor: p.comissao_valor || 0,
+        veiculo_cor: p.veiculo_cor || null,
+        veiculo_ano: p.veiculo_ano || null,
+        veiculo_vin: p.veiculo_vin || null,
+        hash_integridade: p.hash_integridade || null,
+        vistoria: p.vistoria || {},
         synced: true
     };
 }
 
 function mapProcessoFromCloud(row) {
-    return {
+    const mapped = {
         cloud_id: row.id,
         cloud_updated_at: row.updated_at || null,
         veiculo_id: row.veiculo_id ?? null,
@@ -477,8 +483,84 @@ function mapProcessoFromCloud(row) {
         lavador_id: row.lavador_id || null,
         lavador_nome: row.lavador_nome || null,
         comissao_valor: Number(row.comissao_valor || 0),
+        veiculo_cor: row.veiculo_cor || null,
+        veiculo_ano: row.veiculo_ano || null,
+        veiculo_vin: row.veiculo_vin || null,
+        hash_integridade: row.hash_integridade || null,
+        vistoria: row.vistoria || {},
         synced: true
     };
+    if (row.sync_id) mapped.sync_id = row.sync_id;
+    return mapped;
+}
+
+function parseCloudTimestamp(value) {
+    if (!value) return NaN;
+    const str = String(value);
+    const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(str);
+    return new Date(hasZone ? str : `${str.replace(' ', 'T')}Z`).getTime();
+}
+
+// Last-Write-Wins: a pending local edit newer than the cloud row is kept and pushed later.
+function shouldKeepLocalProcesso(local, row) {
+    if (!local || local.synced !== false) return false;
+    const localTs = new Date(local.local_updated_at || 0).getTime();
+    const cloudTs = parseCloudTimestamp(row.updated_at);
+    if (Number.isNaN(cloudTs)) return true;
+    return localTs > cloudTs;
+}
+
+async function recordSyncFailure(syncIds, message) {
+    if (!syncIds.length) return;
+    const wanted = new Set(syncIds);
+    const tx = db.transaction('sync_queue', 'readwrite');
+    const entries = await tx.store.getAll();
+    const now = new Date().toISOString();
+    for (const e of entries) {
+        if (!wanted.has(e.sync_id)) continue;
+        e.retry_count = (e.retry_count || 0) + 1;
+        e.last_error = String(message || '').slice(0, 500);
+        e.last_attempt_at = now;
+        await tx.store.put(e);
+    }
+    await tx.done;
+}
+
+async function finalizeSyncedProcessos(results) {
+    if (!results.length) return;
+    const tx = db.transaction(['processos', 'sync_queue'], 'readwrite');
+    const pStore = tx.objectStore('processos');
+    const qIdx = tx.objectStore('sync_queue').index('sync_id');
+    for (const { snapshot, cloudId } of results) {
+        const current = await pStore.get(snapshot.id);
+        if (!current) continue;
+        if (cloudId) current.cloud_id = cloudId;
+        const sameRevision = (current.local_revision || 0) === (snapshot.local_revision || 0);
+        if (sameRevision) current.synced = true;
+        await pStore.put(current);
+        const entries = await qIdx.getAll(snapshot.sync_id);
+        for (const e of entries) {
+            if ((e.revision || 0) <= (snapshot.local_revision || 0)) await tx.objectStore('sync_queue').delete(e.id);
+        }
+    }
+    await tx.done;
+}
+
+async function getPendingProcessos() {
+    const all = await db.getAll('processos');
+    const queue = await db.getAll('sync_queue');
+    const queued = new Set(queue.map(q => q.sync_id));
+    const pendentes = all.filter(p => p.synced === false || (p.sync_id && queued.has(p.sync_id)));
+    const semSyncId = pendentes.filter(p => !p.sync_id);
+    if (semSyncId.length) {
+        const tx = db.transaction('processos', 'readwrite');
+        for (const p of semSyncId) {
+            p.sync_id = newSyncId();
+            await tx.store.put(p);
+        }
+        await tx.done;
+    }
+    return pendentes;
 }
 
 function sanitizeStorageFileName(name) {
@@ -745,7 +827,7 @@ async function pullCloudProcessos(opts) {
     while (true) {
         let q = sbClient
             .from('processos')
-            .select('id, updated_at, veiculo_id, cliente_id, placa, cliente_nome, modelo, data_entrada, data_saida, status, lavagem_id, lavagem_nome, lavagem_preco, valor_lavagem, valor_adicionais, valor_total, forma_pagamento, observacoes, checklist, danos_mapa, servicos_adicionais, data_estorno, motivo_estorno, valor_estornado, lavador_id, lavador_nome, comissao_valor')
+            .select('*')
             .order('updated_at', { ascending: true })
             .order('id', { ascending: true })
             .limit(pageSize);
@@ -764,18 +846,33 @@ async function pullCloudProcessos(opts) {
 
         pages++;
 
-        const tx = db.transaction('processos', 'readwrite');
+        const tx = db.transaction(['processos', 'sync_queue'], 'readwrite');
         const store = tx.objectStore('processos');
         const idx = hasCloudIdIndex ? store.index('cloud_id') : null;
+        const syncIdx = store.indexNames.contains('sync_id') ? store.index('sync_id') : null;
+        const queueIdx = tx.objectStore('sync_queue').index('sync_id');
 
         for (const row of rows) {
             const cloudId = row.id;
             if (cloudId == null) continue;
 
-            const existing = idx ? await idx.get(cloudId) : byCloudId.get(cloudId);
+            let existing = idx ? await idx.get(cloudId) : byCloudId.get(cloudId);
+            if (!existing && row.sync_id && syncIdx) existing = await syncIdx.get(row.sync_id);
             const mapped = mapProcessoFromCloud(row);
 
+            if (existing && shouldKeepLocalProcesso(existing, row)) {
+                if (existing.cloud_id == null) {
+                    existing.cloud_id = cloudId;
+                    await store.put(existing);
+                }
+                continue;
+            }
+
             if (existing && existing.id != null) {
+                if (existing.sync_id) {
+                    const stale = await queueIdx.getAllKeys(existing.sync_id);
+                    for (const key of stale) await tx.objectStore('sync_queue').delete(key);
+                }
                 const updated = {
                     ...existing,
                     ...mapped,
@@ -786,6 +883,7 @@ async function pullCloudProcessos(opts) {
             } else {
                 const toAdd = { ...mapped };
                 delete toAdd.id;
+                if (!toAdd.sync_id) toAdd.sync_id = newSyncId();
                 const newId = await store.add(toAdd);
                 if (!idx) byCloudId.set(cloudId, { ...toAdd, id: newId });
             }
@@ -833,8 +931,7 @@ async function triggerManualSync(opts) {
             return;
         }
 
-        const all = await db.getAll('processos');
-        const pendentes = all.filter(p => !p.synced);
+        const pendentes = await getPendingProcessos();
 
         if (pendentes.length === 0) {
             try { localStorage.setItem('lavacar_ultima_sincronia', new Date().toISOString()); } catch (_) {}
@@ -843,53 +940,44 @@ async function triggerManualSync(opts) {
             return;
         }
 
-        const toInsert = pendentes.filter(p => !p.cloud_id);
+        const toUpsert = pendentes.filter(p => !p.cloud_id);
         const toUpdate = pendentes.filter(p => p.cloud_id);
 
-        if (!silentErrors) showToast(`Fila de sync: ${toInsert.length} novo(s), ${toUpdate.length} atualização(ões)`, 'info');
+        if (!silentErrors) showToast(`Fila de sync: ${toUpsert.length} novo(s), ${toUpdate.length} atualização(ões)`, 'info');
 
-        const syncedLocalIds = new Set();
+        const results = [];
+        const failures = [];
 
-        if (toInsert.length) {
-            const payloadInsert = toInsert.map(mapProcessoToCloud);
-            const { data: inserted, error } = await sbClient
+        if (toUpsert.length) {
+            const { data: upserted, error } = await sbClient
                 .from('processos')
-                .insert(payloadInsert)
-                .select('id');
-            if (error) throw new Error(error.message);
-
-            const tx = db.transaction('processos', 'readwrite');
-            for (let i = 0; i < toInsert.length; i++) {
-                const p = toInsert[i];
-                const row = inserted?.[i];
-                if (row?.id) p.cloud_id = row.id;
-                if (p.cloud_id) {
-                    p.synced = true;
-                    await tx.store.put(p);
-                    syncedLocalIds.add(p.id);
-                }
+                .upsert(toUpsert.map(mapProcessoToCloud), { onConflict: 'sync_id' })
+                .select('id, sync_id');
+            if (error) {
+                await recordSyncFailure(toUpsert.map(p => p.sync_id), error.message);
+                throw new Error(error.message);
             }
-            await tx.done;
+            const cloudIdBySyncId = new Map((upserted || []).map(r => [r.sync_id, r.id]));
+            for (const p of toUpsert) {
+                const cloudId = cloudIdBySyncId.get(p.sync_id);
+                if (cloudId) results.push({ snapshot: p, cloudId });
+                else failures.push({ syncId: p.sync_id, message: 'Upsert sem retorno de id' });
+            }
         }
 
-        if (toUpdate.length) {
-            for (const p of toUpdate) {
-                const { error } = await sbClient
-                    .from('processos')
-                    .update(mapProcessoToCloud(p))
-                    .eq('id', p.cloud_id);
-                if (error) throw new Error(error.message);
-                syncedLocalIds.add(p.id);
-            }
-
-            const tx = db.transaction('processos', 'readwrite');
-            for (const p of toUpdate) {
-                if (!syncedLocalIds.has(p.id)) continue;
-                p.synced = true;
-                await tx.store.put(p);
-            }
-            await tx.done;
+        for (const p of toUpdate) {
+            const { error } = await sbClient
+                .from('processos')
+                .update(mapProcessoToCloud(p))
+                .eq('id', p.cloud_id);
+            if (error) failures.push({ syncId: p.sync_id, message: error.message });
+            else results.push({ snapshot: p, cloudId: p.cloud_id });
         }
+
+        await finalizeSyncedProcessos(results);
+        for (const f of failures) await recordSyncFailure([f.syncId], f.message);
+        const syncedLocalIds = new Set(results.map(r => r.snapshot.id));
+        if (failures.length && !results.length) throw new Error(failures[0].message);
 
         loadDashboardData();
         try {
@@ -917,7 +1005,10 @@ async function triggerManualSync(opts) {
 
         try { localStorage.setItem('lavacar_ultima_sincronia', new Date().toISOString()); } catch (_) {}
         try { _atualizarBadgeSincronia(); } catch (_) {}
-        if (!silentErrors) showToast(`${syncedLocalIds.size} processo(s) sincronizado(s) com a nuvem!`, 'success');
+        if (!silentErrors) {
+            if (failures.length) showToast(`${syncedLocalIds.size} processo(s) sincronizado(s); ${failures.length} continuam na fila para nova tentativa.`, 'warning');
+            else showToast(`${syncedLocalIds.size} processo(s) sincronizado(s) com a nuvem!`, 'success');
+        }
     } catch (err) {
         console.error('Sync error:', err);
         const raw = (err && (err.message || err.error_description || err.toString)) ? (err.message || err.error_description || String(err)) : 'Erro desconhecido';
@@ -958,8 +1049,8 @@ async function testCloudSync() {
         }
 
         const placa = `TESTSYNC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-        const tx = db.transaction('processos', 'readwrite');
-        const localId = await tx.store.add({
+        const tx = db.transaction(['processos', 'sync_queue'], 'readwrite');
+        const localId = await saveProcessoMutation(tx, {
             placa,
             cliente_nome: 'Teste Sync',
             modelo: 'Teste',
@@ -976,7 +1067,7 @@ async function testCloudSync() {
             checklist: {},
             danos_mapa: [],
             synced: false
-        });
+        }, 'INSERT');
         await tx.done;
 
         await triggerManualSync();
@@ -1011,8 +1102,9 @@ async function testCloudSync() {
         after.status = 'CONCLUIDO';
         after.data_saida = new Date().toISOString();
         after.forma_pagamento = 'PIX';
-        after.synced = false;
-        await db.put('processos', after);
+        const txUpd = db.transaction(['processos', 'sync_queue'], 'readwrite');
+        await saveProcessoMutation(txUpd, after, 'UPDATE');
+        await txUpd.done;
 
         await triggerManualSync();
 
@@ -1143,6 +1235,8 @@ async function exportBackupJSON() {
         veiculos: await db.getAll('veiculos'),
         processos: await db.getAll('processos'),
         servicos: await db.getAll('servicos'),
+        produtos: await db.getAll('produtos'),
+        sync_queue: await db.getAll('sync_queue'),
         exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1154,7 +1248,8 @@ async function exportBackupJSON() {
 
 async function clearAllData() {
     if (confirm('ATENÇÃO: Apagar todos os dados locais remove processos, clientes, veículos, serviços, produtos e mídias do dispositivo. A próxima atualização da nuvem baixará TODO o histórico do zero. Continuar?')) {
-        const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'servicos', 'produtos'], 'readwrite');
+        const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'servicos', 'produtos', 'sync_queue'], 'readwrite');
+        await tx.objectStore('sync_queue').clear();
         await tx.objectStore('clientes').clear();
         await tx.objectStore('veiculos').clear();
         await tx.objectStore('processos').clear();
@@ -1198,16 +1293,21 @@ async function confirmRefundService() {
 
     if (!id || !motivo || isNaN(valorEstorno)) return showToast('Preencha os campos de estorno', 'error');
 
-    const tx = db.transaction('processos', 'readwrite');
-    const proc = await tx.store.get(id);
+    const original = await db.get('processos', id);
+    const total = original?.valor_total || 0;
+    if (original?.data_saida && (valorEstorno <= 0 || valorEstorno > total)) {
+        return showToast(`O valor do estorno deve ser maior que zero e até R$ ${total.toFixed(2)}`, 'error');
+    }
+
+    const tx = db.transaction(['processos', 'sync_queue'], 'readwrite');
+    const proc = await tx.objectStore('processos').get(id);
 
     if (proc) {
         proc.status = 'CANCELADO';
         proc.data_estorno = new Date().toISOString();
         proc.motivo_estorno = motivo;
-        proc.valor_estornado = valorEstorno;
-        proc.synced = false;
-        await tx.store.put(proc);
+        proc.valor_estornado = proc.data_saida ? valorEstorno : 0;
+        await saveProcessoMutation(tx, proc, 'REFUND');
         await tx.done;
 
         closeModalRefund();

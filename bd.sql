@@ -60,6 +60,12 @@ CREATE TABLE processos (
     motivo_estorno TEXT,
     valor_estornado DECIMAL(10, 2) DEFAULT 0.00,
     synced BOOLEAN DEFAULT FALSE,
+    sync_id UUID UNIQUE DEFAULT gen_random_uuid(),
+    veiculo_cor VARCHAR(30),
+    veiculo_ano INTEGER,
+    veiculo_vin VARCHAR(17),
+    hash_integridade VARCHAR(64),
+    vistoria JSONB DEFAULT '{}'::jsonb,
     criado_em TIMESTAMP DEFAULT NOW()
 );
 
