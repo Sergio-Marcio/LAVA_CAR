@@ -37,11 +37,15 @@ async function initDB() {
                 if (!db.objectStoreNames.contains('produtos')) {
                     db.createObjectStore('produtos', { keyPath: 'id', autoIncrement: true });
                 }
+                if (!db.objectStoreNames.contains('boxes')) {
+                    db.createObjectStore('boxes', { keyPath: 'id', autoIncrement: true });
+                }
             }
         });
 
         await seedDefaultServicesIfEmpty();
         await seedDefaultProductsIfEmpty();
+        await seedDefaultBoxesIfEmpty();
         loadDashboardData();
     } catch (err) {
         console.error('Erro no IndexedDB:', err);
@@ -59,6 +63,17 @@ async function seedDefaultProductsIfEmpty() {
         await tx.store.add({ nome: 'Desengraxante de Motor 5L', valor: 75.00, nivel: 'CHEIO', percentual: 100, descricao: 'Desengraxante de caixas de roda e motor' });
         await tx.store.add({ nome: 'Cheirinho / Essência Automotiva 1L', valor: 35.00, nivel: 'BAIXO', percentual: 20, descricao: 'Aroma interno para veículos' });
         await tx.store.add({ nome: 'Cristalizador de Para-brisa 500ml', valor: 40.00, nivel: 'MEIO', percentual: 45, descricao: 'Repelente de chuva' });
+        await tx.done;
+    }
+}
+
+async function seedDefaultBoxesIfEmpty() {
+    const count = await db.count('boxes');
+    if (count === 0) {
+        const tx = db.transaction('boxes', 'readwrite');
+        await tx.store.add({ nome: 'Box 1', tipo: 'LAVAGEM', ativo: true, criado_em: new Date().toISOString() });
+        await tx.store.add({ nome: 'Box 2', tipo: 'LAVAGEM', ativo: true, criado_em: new Date().toISOString() });
+        await tx.store.add({ nome: 'Box 3 (Estética / Cura)', tipo: 'ESTETICA', ativo: true, criado_em: new Date().toISOString() });
         await tx.done;
     }
 }

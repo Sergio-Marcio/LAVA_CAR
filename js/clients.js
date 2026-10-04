@@ -446,6 +446,12 @@ function mapProcessoToCloud(p) {
         lavador_id: p.lavador_id || null,
         lavador_nome: p.lavador_nome || null,
         comissao_valor: p.comissao_valor || 0,
+        etapa: p.etapa || null,
+        etapas_historico: p.etapas_historico || [],
+        box_id: p.box_id ?? null,
+        box_nome: p.box_nome || null,
+        cura_fim_em: p.cura_fim_em || null,
+        qa_checklist: p.qa_checklist || null,
         synced: true
     };
 }
@@ -477,6 +483,12 @@ function mapProcessoFromCloud(row) {
         lavador_id: row.lavador_id || null,
         lavador_nome: row.lavador_nome || null,
         comissao_valor: Number(row.comissao_valor || 0),
+        etapa: row.etapa || null,
+        etapas_historico: Array.isArray(row.etapas_historico) ? row.etapas_historico : [],
+        box_id: row.box_id ?? null,
+        box_nome: row.box_nome || null,
+        cura_fim_em: row.cura_fim_em || null,
+        qa_checklist: row.qa_checklist || null,
         synced: true
     };
 }
@@ -745,7 +757,7 @@ async function pullCloudProcessos(opts) {
     while (true) {
         let q = sbClient
             .from('processos')
-            .select('id, updated_at, veiculo_id, cliente_id, placa, cliente_nome, modelo, data_entrada, data_saida, status, lavagem_id, lavagem_nome, lavagem_preco, valor_lavagem, valor_adicionais, valor_total, forma_pagamento, observacoes, checklist, danos_mapa, servicos_adicionais, data_estorno, motivo_estorno, valor_estornado, lavador_id, lavador_nome, comissao_valor')
+            .select('id, updated_at, veiculo_id, cliente_id, placa, cliente_nome, modelo, data_entrada, data_saida, status, lavagem_id, lavagem_nome, lavagem_preco, valor_lavagem, valor_adicionais, valor_total, forma_pagamento, observacoes, checklist, danos_mapa, servicos_adicionais, data_estorno, motivo_estorno, valor_estornado, lavador_id, lavador_nome, comissao_valor, etapa, etapas_historico, box_id, box_nome, cura_fim_em, qa_checklist')
             .order('updated_at', { ascending: true })
             .order('id', { ascending: true })
             .limit(pageSize);

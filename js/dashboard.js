@@ -19,6 +19,7 @@ async function loadDashboardData() {
     document.getElementById('stat-revenue').textContent = `R$ ${todayRevenue.toFixed(2)}`;
     document.getElementById('stat-total').textContent = all.length;
 
+    if (typeof renderKanban === 'function') renderKanban(all);
     filterInspections(all);
 }
 
@@ -154,6 +155,8 @@ async function confirmCheckout() {
         proc.status = 'CONCLUIDO';
         proc.data_saida = new Date().toISOString();
         proc.forma_pagamento = formaPagamento;
+        (proc.etapas_historico || []).forEach(h => { if (!h.fim) h.fim = proc.data_saida; });
+        proc.cura_fim_em = null;
         proc.synced = false;
         await tx.store.put(proc);
         await tx.done;

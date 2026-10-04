@@ -220,6 +220,19 @@
                 </div>
             </div>
 
+            <!-- Kanban Operacional de Pátio -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="kanban" class="w-5 h-5 text-brand-500"></i> Painel de Produção (Kanban)
+                    </h3>
+                    <span class="text-[10px] text-slate-400 hidden sm:inline">Toque em "Avançar" ou arraste o cartão entre colunas</span>
+                </div>
+                <div id="kanban-board" class="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 snap-x snap-mandatory">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+
             <!-- Search & Filter Controls -->
             <div class="flex flex-col sm:flex-row gap-3">
                 <div class="relative flex-1">
@@ -1115,6 +1128,82 @@
         </div>
     </div>
 
+    <!-- MODAL: MOVER ETAPA NO KANBAN (TÉCNICO, BOX, CURA) -->
+    <div id="modal-etapa" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="move-right" class="w-5 h-5 text-brand-500"></i> Mover para <span id="et-destino-label" class="text-brand-600"></span>
+                </h3>
+                <button type="button" onclick="closeModalEtapa()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <p class="text-xs text-slate-500">Veículo <strong id="et-placa" class="font-mono text-slate-900 dark:text-white"></strong></p>
+
+            <form onsubmit="event.preventDefault(); confirmarMovimentoEtapa();" class="space-y-3">
+                <input type="hidden" id="et-processo-id">
+                <input type="hidden" id="et-etapa-destino">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Técnico responsável pela etapa</label>
+                    <select id="et-tecnico" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none font-bold"></select>
+                    <p class="text-[10px] text-slate-400 mt-1">Cada etapa pode ter um técnico diferente; o tempo é rateado para comissão.</p>
+                </div>
+                <div id="et-box-wrap">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Box de serviço</label>
+                    <select id="et-box" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none"></select>
+                </div>
+                <div id="et-cura-wrap" class="space-y-2">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Temporizador de cura / acomodação</label>
+                    <select id="et-cura" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none"></select>
+                    <input type="number" min="1" id="et-cura-custom" placeholder="Ou informe minutos personalizados..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono outline-none">
+                    <p class="text-[10px] text-slate-400">Ao terminar, o cartão pisca no Kanban e o dispositivo emite alerta sonoro.</p>
+                </div>
+
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalEtapa()" class="touch-target px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" class="touch-target px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Confirmar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: INSPEÇÃO DE QUALIDADE (QA CHECKLIST) -->
+    <div id="modal-qa" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="clipboard-check" class="w-5 h-5 text-amber-500"></i> Inspeção de Qualidade
+                </h3>
+                <button type="button" onclick="closeModalQa()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <input type="hidden" id="qa-processo-id">
+            <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
+                <div><span class="text-slate-400">Placa:</span> <strong id="qa-placa" class="font-mono text-brand-600"></strong></div>
+                <div><span class="text-slate-400">Cliente:</span> <strong id="qa-cliente"></strong></div>
+            </div>
+            <p id="qa-aviso-perfil" class="hidden text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/50 p-3 rounded-xl">Somente Gerente ou Lavador Sênior pode validar a inspeção.</p>
+
+            <div>
+                <h5 class="text-xs font-bold uppercase text-slate-400 mb-2">Itens contratados</h5>
+                <div id="qa-itens" class="space-y-2"></div>
+            </div>
+
+            <div>
+                <h5 class="text-xs font-bold uppercase text-slate-400 mb-1">Rateio de produção (técnicos)</h5>
+                <ul id="qa-rateio" class="text-xs space-y-1 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl"></ul>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Observações do supervisor</label>
+                <textarea id="qa-obs" rows="2" placeholder="Retoques, pendências, elogios..." class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none"></textarea>
+            </div>
+
+            <div class="pt-3 border-t flex flex-col sm:flex-row justify-end gap-2">
+                <button type="button" onclick="confirmarQa(false)" class="touch-target px-4 py-2 bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 font-bold text-xs rounded-xl">Reprovar (retrabalho)</button>
+                <button type="button" id="qa-confirm-btn" onclick="confirmarQa(true)" class="touch-target px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow">Aprovar e liberar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bottom Ergonomic Thumb Navigation Bar -->
     <nav class="bottom-nav glass-panel border-t border-slate-200 dark:border-slate-800">
         <div class="max-w-md mx-auto px-4 py-2 flex items-center justify-around">
@@ -1155,6 +1244,7 @@
     <script src="js/media.js"></script>
     <script src="js/checkin.js"></script>
     <script src="js/dashboard.js"></script>
+    <script src="js/kanban.js"></script>
     <script src="js/services.js"></script>
     <script src="js/clients.js"></script>
     <script src="js/reports.js"></script>

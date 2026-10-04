@@ -40,6 +40,15 @@ CREATE TABLE produtos (
     criado_em TIMESTAMP DEFAULT NOW()
 );
 
+-- Boxes Físicos de Serviço (Lavagem / Estética e Cura)
+CREATE TABLE boxes (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(60) NOT NULL,
+    tipo VARCHAR(20) NOT NULL DEFAULT 'LAVAGEM', -- 'LAVAGEM' ou 'ESTETICA'
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT NOW()
+);
+
 -- Tabela de Processos / Ordens de Serviço (Entrada, Saída e Estorno)
 CREATE TABLE processos (
     id SERIAL PRIMARY KEY,
@@ -59,6 +68,13 @@ CREATE TABLE processos (
     data_estorno TIMESTAMP,
     motivo_estorno TEXT,
     valor_estornado DECIMAL(10, 2) DEFAULT 0.00,
+    -- Gestão de Pátio (Kanban / Cura / Multi-técnico)
+    etapa VARCHAR(20), -- 'FILA', 'LAVAGEM', 'ESTETICA', 'QA', 'PRONTO' (enquanto EM_ANDAMENTO)
+    etapas_historico JSONB DEFAULT '[]', -- [{etapa, inicio, fim, tecnico_id, tecnico_nome, box_id, box_nome}]
+    box_id INTEGER REFERENCES boxes(id),
+    box_nome VARCHAR(60),
+    cura_fim_em TIMESTAMP,
+    qa_checklist JSONB, -- {itens:[{nome, ok}], observacoes, aprovado_em, aprovado_por}
     synced BOOLEAN DEFAULT FALSE,
     criado_em TIMESTAMP DEFAULT NOW()
 );
@@ -108,6 +124,12 @@ INSERT INTO servicos (nome, categoria, preco, descricao) VALUES
 ('Lavagem Técnica de Motor', 'OUTRO', 70.00, 'Limpeza minuciosa do motor com produtos desengraxantes e verniz elétrico'),
 ('Limpeza e Hidratação de Couro', 'OUTRO', 120.00, 'Higienização profunda dos bancos de couro com hidratante específico'),
 ('Cristalização de Para-brisa', 'OUTRO', 40.00, 'Repelente de água para chuva nos vidros dianteiros');
+
+-- Boxes de Serviço
+INSERT INTO boxes (nome, tipo) VALUES
+('Box 1', 'LAVAGEM'),
+('Box 2', 'LAVAGEM'),
+('Box 3 (Estética / Cura)', 'ESTETICA');
 
 -- Produtos e Controle de Nível
 INSERT INTO produtos (nome, valor, nivel, percentual, descricao) VALUES
