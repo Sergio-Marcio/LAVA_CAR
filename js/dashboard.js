@@ -249,6 +249,7 @@ async function viewDetails(id) {
             ${(proc.danos_mapa || []).length
                 ? proc.danos_mapa.map((d, i) => `<p class="text-xs">${i + 1}. ${esc(sectorLabel(d.setor))} • ${esc(damageTypeLabel(d.tipo))}${d.midia_sha256 ? ' • com foto' : ''}</p>`).join('')
                 : '<p class="text-xs text-slate-400">Nenhuma avaria registrada.</p>'}
+            ${proc.vistoria && (proc.vistoria.km != null || proc.vistoria.combustivel) ? `<p class="text-xs mt-1">KM: ${esc(proc.vistoria.km ?? '-')} • Combustível: ${esc(proc.vistoria.combustivel || '-')}</p>` : ''}
             ${proc.hash_integridade ? `<p class="text-[10px] font-mono text-slate-400 mt-1 break-all">SHA-256: ${esc(proc.hash_integridade)}</p>` : ''}
         </div>
 
