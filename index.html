@@ -220,6 +220,37 @@
                 </div>
             </div>
 
+            <!-- Kanban do Pátio -->
+            <div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="columns-3" class="w-5 h-5 text-brand-500"></i> Kanban do Pátio
+                    </h3>
+                    <div class="gerente-only flex items-center gap-1">
+                        <label for="patio-boxes-input" class="text-[11px] text-slate-500">Boxes</label>
+                        <input id="patio-boxes-input" type="text" class="uppercase p-1.5 text-xs w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg" placeholder="BOX 1, BOX 2">
+                        <button onclick="saveBoxesConfig()" class="px-2 py-1.5 text-[11px] font-bold rounded-lg bg-slate-800 text-white">Salvar</button>
+                    </div>
+                </div>
+                <div id="patio-board" class="flex gap-3 overflow-x-auto pb-2"></div>
+            </div>
+
+            <!-- Agendamentos -->
+            <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="calendar-clock" class="w-5 h-5 text-brand-500"></i> Agendamentos
+                </h3>
+                <form id="form-agendamento" onsubmit="saveAgendamento(event)" class="grid grid-cols-2 md:grid-cols-6 gap-2">
+                    <input id="ag-data-hora" type="datetime-local" required aria-label="Data e hora" class="col-span-2 md:col-span-1 w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+                    <input id="ag-placa" type="text" required maxlength="8" placeholder="Placa" class="uppercase w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+                    <input id="ag-cliente" type="text" required placeholder="Cliente" class="uppercase w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+                    <input id="ag-telefone" type="tel" placeholder="Telefone" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+                    <input id="ag-servico" type="text" placeholder="Serviço" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+                    <button type="submit" class="px-3 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl">Agendar</button>
+                </form>
+                <div id="agendamentos-list" class="space-y-2"></div>
+            </div>
+
             <!-- Search & Filter Controls -->
             <div class="flex flex-col sm:flex-row gap-3">
                 <div class="relative flex-1">
@@ -939,6 +970,30 @@
         </div>
     </div>
 
+    <!-- MODAL: BOX / TÉCNICOS / CURA -->
+    <div id="modal-patio" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Pátio • <span id="patio-modal-placa" class="font-mono"></span></h3>
+            <input type="hidden" id="patio-processo-id">
+            <div>
+                <label for="patio-box" class="block text-xs font-bold uppercase text-slate-500 mb-1">Box</label>
+                <select id="patio-box" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none"></select>
+            </div>
+            <div>
+                <p class="block text-xs font-bold uppercase text-slate-500 mb-1">Técnicos</p>
+                <div id="patio-tecnicos" class="grid grid-cols-2 gap-1"></div>
+            </div>
+            <div>
+                <label for="patio-cura-min" class="block text-xs font-bold uppercase text-slate-500 mb-1">Timer de cura (minutos a partir de agora)</label>
+                <input id="patio-cura-min" type="number" min="0" max="1440" placeholder="Ex: 60 (0 remove)" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none">
+            </div>
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button onclick="closePatioModal()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                <button onclick="savePatioModal()" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CADASTRAR NOVO SERVIÇO -->
     <div id="modal-add-service" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
@@ -1182,6 +1237,7 @@
     <script src="js/inspection.js"></script>
     <script src="js/checkin.js"></script>
     <script src="js/dashboard.js"></script>
+    <script src="js/patio.js"></script>
     <script src="js/services.js"></script>
     <script src="js/clients.js"></script>
     <script src="js/reports.js"></script>

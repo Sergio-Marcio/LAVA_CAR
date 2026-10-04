@@ -452,6 +452,11 @@ function mapProcessoToCloud(p) {
         veiculo_vin: p.veiculo_vin || null,
         hash_integridade: p.hash_integridade || null,
         vistoria: p.vistoria || {},
+        etapa: p.etapa || 'FILA',
+        etapas_historico: p.etapas_historico || [],
+        box: p.box || null,
+        tecnicos: p.tecnicos || [],
+        cura_ate: p.cura_ate || null,
         synced: true
     };
 }
@@ -488,6 +493,11 @@ function mapProcessoFromCloud(row) {
         veiculo_vin: row.veiculo_vin || null,
         hash_integridade: row.hash_integridade || null,
         vistoria: row.vistoria || {},
+        etapa: row.etapa || 'FILA',
+        etapas_historico: Array.isArray(row.etapas_historico) ? row.etapas_historico : [],
+        box: row.box || null,
+        tecnicos: Array.isArray(row.tecnicos) ? row.tecnicos : [],
+        cura_ate: row.cura_ate || null,
         synced: true
     };
     if (row.sync_id) mapped.sync_id = row.sync_id;
@@ -1237,6 +1247,7 @@ async function exportBackupJSON() {
         servicos: await db.getAll('servicos'),
         produtos: await db.getAll('produtos'),
         sync_queue: await db.getAll('sync_queue'),
+        agendamentos: await db.getAll('agendamentos'),
         exportDate: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1248,8 +1259,9 @@ async function exportBackupJSON() {
 
 async function clearAllData() {
     if (confirm('ATENÇÃO: Apagar todos os dados locais remove processos, clientes, veículos, serviços, produtos e mídias do dispositivo. A próxima atualização da nuvem baixará TODO o histórico do zero. Continuar?')) {
-        const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'servicos', 'produtos', 'sync_queue'], 'readwrite');
+        const tx = db.transaction(['clientes', 'veiculos', 'processos', 'registros_midia', 'servicos', 'produtos', 'sync_queue', 'agendamentos'], 'readwrite');
         await tx.objectStore('sync_queue').clear();
+        await tx.objectStore('agendamentos').clear();
         await tx.objectStore('clientes').clear();
         await tx.objectStore('veiculos').clear();
         await tx.objectStore('processos').clear();

@@ -1,6 +1,6 @@
 // --- STATE & CONSTANTS ---
 const DB_NAME = 'LavaCarDB';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 let db;
 let currentTab = 'dashboard';
 let currentReportTab = 'daily';

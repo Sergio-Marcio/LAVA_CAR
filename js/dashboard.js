@@ -20,6 +20,9 @@ async function loadDashboardData() {
     document.getElementById('stat-total').textContent = all.length;
 
     filterInspections(all);
+    renderPatioBoard(all);
+    renderBoxesConfig();
+    loadAgendamentos();
 }
 
 async function filterInspections(all) {

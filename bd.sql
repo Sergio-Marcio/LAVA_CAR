@@ -66,6 +66,11 @@ CREATE TABLE processos (
     veiculo_vin VARCHAR(17),
     hash_integridade VARCHAR(64),
     vistoria JSONB DEFAULT '{}'::jsonb,
+    etapa VARCHAR(20) DEFAULT 'FILA',
+    etapas_historico JSONB DEFAULT '[]'::jsonb,
+    box VARCHAR(30),
+    tecnicos JSONB DEFAULT '[]'::jsonb,
+    cura_ate TIMESTAMPTZ,
     criado_em TIMESTAMP DEFAULT NOW()
 );
 

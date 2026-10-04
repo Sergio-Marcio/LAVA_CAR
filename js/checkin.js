@@ -164,6 +164,11 @@ async function saveInspectionRDP() {
         lavador_id: lavadorId,
         lavador_nome: lavadorNome,
         comissao_valor: comissaoValor,
+        etapa: 'FILA',
+        etapas_historico: [{ etapa: 'FILA', em: dataEntrada }],
+        tecnicos: [{ id: lavadorId, nome: lavadorNome }],
+        box: null,
+        cura_ate: null,
         checklist,
         danos_mapa: damagePoints,
         observacoes: obs,
@@ -211,6 +216,8 @@ async function saveInspectionRDP() {
     }
 
     await tx.done;
+    const novoProcesso = await db.get('processos', processoId);
+    await markAgendamentoCheckin(novoProcesso?.sync_id || null);
 
     showToast('Entrada do Veículo registrada com sucesso!', 'success');
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {

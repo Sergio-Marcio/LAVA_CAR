@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lavacar-pwa-v21';
+const CACHE_NAME = 'lavacar-pwa-v22';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const ASSETS_TO_CACHE = [
   './js/wizard.js',
   './js/media.js',
   './js/inspection.js',
+  './js/patio.js',
   './js/checkin.js',
   './js/dashboard.js',
   './js/services.js',

@@ -50,6 +50,11 @@ async function initDB() {
                 if (!db.objectStoreNames.contains('produtos')) {
                     db.createObjectStore('produtos', { keyPath: 'id', autoIncrement: true });
                 }
+                if (!db.objectStoreNames.contains('agendamentos')) {
+                    const aStore = db.createObjectStore('agendamentos', { keyPath: 'id', autoIncrement: true });
+                    aStore.createIndex('data_hora', 'data_hora');
+                    aStore.createIndex('status', 'status');
+                }
             }
         });
 
