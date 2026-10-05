@@ -47,7 +47,10 @@ function resumoHistoricoPlaca(historico) {
         emAndamento: historico.find(p => p.status === 'EM_ANDAMENTO') || null,
         cliente_nome: ultimo?.cliente_nome || '',
         cliente_id: ultimo?.cliente_id ?? null,
-        modelo: historico.find(p => p.modelo)?.modelo || ''
+        modelo: historico.find(p => p.modelo)?.modelo || '',
+        veiculo_cor: historico.find(p => p.veiculo_cor)?.veiculo_cor || '',
+        veiculo_ano: historico.find(p => p.veiculo_ano)?.veiculo_ano || '',
+        veiculo_vin: historico.find(p => p.veiculo_vin)?.veiculo_vin || ''
     };
 }
 
@@ -89,6 +92,10 @@ async function preencherClienteDaPlaca(resumo) {
     let preencheu = false;
     if (inpCliente && !inpCliente.value.trim() && resumo.cliente_nome) { inpCliente.value = toUpper(resumo.cliente_nome); preencheu = true; }
     if (inpModelo && !inpModelo.value.trim() && resumo.modelo) { inpModelo.value = toUpper(resumo.modelo); preencheu = true; }
+    [['inp-cor', toUpper(resumo.veiculo_cor)], ['inp-ano', resumo.veiculo_ano], ['inp-vin', toUpper(resumo.veiculo_vin)]].forEach(([id, valor]) => {
+        const el = document.getElementById(id);
+        if (el && !el.value.trim() && valor) { el.value = valor; preencheu = true; }
+    });
     if (inpTel && !inpTel.value.trim()) {
         try {
             const clientes = await db.getAll('clientes');

@@ -29,31 +29,23 @@ function stopCamera() {
 
 function takeSnapshot() {
     const videoEl = document.getElementById('video-preview');
-    const canvas = document.getElementById('photo-canvas');
     if (!videoEl.srcObject) return;
 
-    canvas.width = videoEl.videoWidth || 640;
-    canvas.height = videoEl.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-
-    if (videoEl.classList.contains('mirror-video')) {
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-    }
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
+    processInspectionImage(videoEl, videoEl.videoWidth || 640, videoEl.videoHeight || 480, {
+        mirror: videoEl.classList.contains('mirror-video')
+    }).then(({ blob, metadata }) => {
+        if (!blob) return showToast('Não foi possível gerar a foto.', 'error');
         currentInspectionMedia.push({
             id: Date.now(),
             tipo: 'FOTO',
-            url: url,
-            blob: blob,
-            nome: `Foto_${new Date().toLocaleTimeString().replace(/:/g, '-')}.jpg`
+            url: URL.createObjectURL(blob),
+            blob,
+            metadata,
+            nome: `Foto_${Date.now()}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`
         });
         renderMediaGallery();
         showToast('Foto tirada com sucesso!', 'success');
-    }, 'image/jpeg', 0.85);
+    }).catch(() => showToast('Não foi possível gerar a foto.', 'error'));
 }
 
 async function toggleVideoRecording() {
@@ -122,19 +114,35 @@ async function toggleVideoRecording() {
     }
 }
 
-function handleFileUpload(evt) {
-    const files = evt.target.files;
-    if (!files || !files.length) return;
-    Array.from(files).forEach(file => {
-        const isVideo = file.type.startsWith('video');
-        currentInspectionMedia.push({
-            id: Date.now() + Math.random(),
-            tipo: isVideo ? 'VIDEO' : 'FOTO',
-            url: URL.createObjectURL(file),
-            blob: file,
-            nome: file.name
-        });
-    });
+async function handleFileUpload(evt) {
+    const files = Array.from(evt.target.files || []);
+    evt.target.value = '';
+    for (const file of files) {
+        if (file.type.startsWith('video')) {
+            currentInspectionMedia.push({
+                id: Date.now() + Math.random(),
+                tipo: 'VIDEO',
+                url: URL.createObjectURL(file),
+                blob: file,
+                nome: file.name,
+                metadata: { capturado_em: new Date().toISOString(), geo: currentInspectionGeo, sha256: await sha256Hex(file) }
+            });
+            continue;
+        }
+        try {
+            const { blob, metadata } = await processImageFile(file);
+            currentInspectionMedia.push({
+                id: Date.now() + Math.random(),
+                tipo: 'FOTO',
+                url: URL.createObjectURL(blob),
+                blob,
+                metadata,
+                nome: `${file.name.replace(/\.[^.]+$/, '')}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`
+            });
+        } catch (_) {
+            showToast(`Não foi possível processar ${file.name}.`, 'error');
+        }
+    }
     renderMediaGallery();
 }
 
@@ -149,7 +157,8 @@ function renderMediaGallery() {
 
     container.innerHTML = currentInspectionMedia.map((m, idx) => `
         <div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-black aspect-square">
-            ${m.tipo === 'FOTO' ? `<img src="${m.url}" class="w-full h-full object-cover">` : `<video src="${m.url}" class="w-full h-full object-cover"></video>`}
+            ${m.tipo === 'FOTO' ? `<img src="${escapeHtml(m.url)}" class="w-full h-full object-cover">` : `<video src="${escapeHtml(m.url)}" class="w-full h-full object-cover"></video>`}
+            ${typeof m.avaria_index === 'number' ? `<span class="absolute bottom-1 left-1 px-1.5 py-0.5 bg-rose-600 text-white rounded text-[10px] font-bold">AVARIA ${m.avaria_index + 1}</span>` : ''}
             <button type="button" onclick="removeMedia(${idx})" class="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full text-xs">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
             </button>
@@ -164,8 +173,12 @@ function removeMedia(idx) {
     if (m && typeof m.url === 'string' && m.url.startsWith('blob:')) {
         try { URL.revokeObjectURL(m.url); } catch (_) {}
     }
+    if (m && typeof m.avaria_index === 'number' && damagePoints[m.avaria_index]) {
+        delete damagePoints[m.avaria_index].midia_sha256;
+    }
     currentInspectionMedia.splice(idx, 1);
     renderMediaGallery();
+    if (typeof renderDamageList === 'function') renderDamageList();
 }
 
 // --- VOICE DICTATION ---

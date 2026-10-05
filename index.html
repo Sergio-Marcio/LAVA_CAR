@@ -314,6 +314,20 @@
                             <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Telefone / WhatsApp</label>
                             <input type="tel" id="inp-telefone" placeholder="(11) 99999-9999" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
                         </div>
+                        <div class="grid grid-cols-3 gap-2 md:col-span-2">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Cor</label>
+                                <input type="text" id="inp-cor" placeholder="Ex: Prata" class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Ano</label>
+                                <input type="number" id="inp-ano" min="1950" max="2100" placeholder="Ex: 2021" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base focus:ring-2 focus:ring-brand-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Chassi (VIN)</label>
+                                <input type="text" id="inp-vin" maxlength="17" placeholder="17 caracteres" class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base font-mono focus:ring-2 focus:ring-brand-500 outline-none">
+                            </div>
+                        </div>
                         <div class="md:col-span-2">
                             <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Lavador Responsável *</label>
                             <select id="inp-lavador" required class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base font-medium focus:ring-2 focus:ring-brand-500 outline-none">
@@ -373,23 +387,16 @@
                         <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
                             <i data-lucide="check-square" class="w-4 h-4 text-brand-500"></i> Checklist de Entrada RDP
                         </h4>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-                                <span class="text-sm font-medium">Chave no contato</span>
-                                <input type="checkbox" id="chk-chave" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
-                            </label>
-                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-                                <span class="text-sm font-medium">Pertences no porta-malas</span>
-                                <input type="checkbox" id="chk-portamalas" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
-                            </label>
-                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-                                <span class="text-sm font-medium">Documentos no painel</span>
-                                <input type="checkbox" id="chk-documentos" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
-                            </label>
-                            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer">
-                                <span class="text-sm font-medium">Estepe / Macaco OK</span>
-                                <input type="checkbox" id="chk-estepe" class="w-5 h-5 text-brand-600 rounded focus:ring-brand-500">
-                            </label>
+                        <div id="checklist-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Quilometragem</label>
+                                <input type="number" id="inp-km" min="0" placeholder="Ex: 45200" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Combustível</label>
+                                <select id="inp-combustivel" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base outline-none"></select>
+                            </div>
                         </div>
                     </div>
 
@@ -401,10 +408,16 @@
                             </h4>
                             <button type="button" onclick="clearDamageCanvas()" class="text-xs text-rose-500 hover:underline">Limpar Pontos</button>
                         </div>
+                        <div class="flex items-center gap-2">
+                            <label for="damage-type" class="text-xs font-bold uppercase text-slate-500">Tipo da próxima avaria</label>
+                            <select id="damage-type" class="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"></select>
+                        </div>
                         <div class="relative w-full flex justify-center">
                             <canvas id="damage-canvas" width="600" height="260" class="w-full max-w-lg border border-slate-300 dark:border-slate-700"></canvas>
                         </div>
                         <p id="damage-count" class="text-xs text-slate-400 text-right">0 avarias marcadas</p>
+                        <div id="damage-list" class="space-y-1"></div>
+                        <input type="file" id="damage-photo-input" accept="image/*" capture="environment" class="hidden" onchange="handleDamagePhoto(event)">
                     </div>
 
                     <!-- Voice Observations -->
@@ -508,6 +521,17 @@
                                 <span id="rev-hash" class="font-mono text-xs text-slate-500 dark:text-slate-400 break-all"></span>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <i data-lucide="pen-tool" class="w-4 h-4 text-brand-500"></i> Assinatura do Cliente *
+                            </h4>
+                            <button type="button" onclick="clearSignature()" class="text-xs text-rose-500 hover:underline">Limpar</button>
+                        </div>
+                        <p class="text-[11px] text-slate-500">O cliente declara estar de acordo com o checklist e as avarias registradas nesta vistoria de entrada.</p>
+                        <canvas id="signature-pad" width="600" height="180" class="w-full bg-white border border-slate-300 dark:border-slate-700 rounded-xl touch-none"></canvas>
                     </div>
                 </div>
 
@@ -1379,6 +1403,7 @@
     <script src="js/placa.js"></script>
     <script src="js/wizard.js"></script>
     <script src="js/media.js"></script>
+    <script src="js/inspection.js"></script>
     <script src="js/checkin.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/kanban.js"></script>

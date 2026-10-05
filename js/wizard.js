@@ -24,8 +24,15 @@ function setStep(step) {
 
     if (step === 1) loadLavadoresDropdown();
     if (step === 2) renderServicesSelectorsInWizard();
-    if (step === 3) setTimeout(drawCarDiagram, 100);
-    if (step === 5) updateReviewSummary();
+    if (step === 3) {
+        renderChecklist();
+        setTimeout(drawCarDiagram, 100);
+    }
+    if (step === 4 && !currentInspectionGeo) captureInspectionGeo();
+    if (step === 5) {
+        initSignaturePad();
+        updateReviewSummary();
+    }
 }
 
 async function nextStep() {
@@ -35,6 +42,8 @@ async function nextStep() {
         const lavador = document.getElementById('inp-lavador').value;
         if (!placa || !cliente) return showToast('Digite a Placa e o Cliente', 'error');
         if (!lavador) return showToast('Selecione o Lavador Responsável', 'error');
+        const vin = document.getElementById('inp-vin')?.value.trim();
+        if (vin && !isVinValido(vin)) return showToast('Chassi (VIN) inválido: use 17 caracteres, sem I, O ou Q.', 'error');
         if (typeof validarPlacaParaEntrada === 'function' && !(await validarPlacaParaEntrada(placa))) return;
     }
     if (currentStep === 2) {
@@ -163,7 +172,9 @@ function drawCarDiagram() {
     ctx.font = 'bold 11px sans-serif';
     ctx.fillText('FRENTE', 150, 135);
     ctx.fillText('TRASEIRA', 410, 135);
-    ctx.fillText('TETO / PAINEL', 270, 135);
+    ctx.fillText('TETO / CAPÔ', 270, 135);
+    ctx.fillText('LATERAL ESQUERDA', 250, 14);
+    ctx.fillText('LATERAL DIREITA', 255, 254);
 
     damagePoints.forEach((p, idx) => {
         ctx.beginPath();
@@ -180,6 +191,7 @@ function drawCarDiagram() {
     });
 
     document.getElementById('damage-count').textContent = `${damagePoints.length} avarias marcadas`;
+    renderDamageList();
 }
 
 document.getElementById('damage-canvas')?.addEventListener('pointerdown', function(e) {
@@ -189,12 +201,15 @@ document.getElementById('damage-canvas')?.addEventListener('pointerdown', functi
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    damagePoints.push({ x, y });
+    const tipo = document.getElementById('damage-type')?.value;
+    damagePoints.push(buildDamagePoint(x, y, tipo));
     drawCarDiagram();
 });
 
 function clearDamageCanvas() {
     damagePoints = [];
+    currentInspectionMedia = currentInspectionMedia.filter(m => typeof m.avaria_index !== 'number');
+    renderMediaGallery();
     drawCarDiagram();
 }
 

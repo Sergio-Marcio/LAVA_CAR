@@ -65,6 +65,11 @@ CREATE TABLE processos (
     forma_pagamento VARCHAR(30), -- 'PIX', 'DINHEIRO', 'CARTAO_CREDITO', 'CARTAO_DEBITO'
     observacoes TEXT,
     hash_integridade VARCHAR(64),
+    -- Vistoria de entrada (dados ampliados do veículo, KM, combustível, GPS e assinatura)
+    veiculo_cor VARCHAR(30),
+    veiculo_ano INTEGER,
+    veiculo_vin VARCHAR(17),
+    vistoria JSONB DEFAULT '{}'::jsonb, -- {km, combustivel, geo, assinatura_sha256, assinada_em, midias_sha256}
     -- Campos de Estorno / Cancelamento
     data_estorno TIMESTAMP,
     motivo_estorno TEXT,
@@ -93,7 +98,7 @@ CREATE TABLE processo_servicos (
 CREATE TABLE registros_midia (
     id SERIAL PRIMARY KEY,
     processo_id INTEGER REFERENCES processos(id),
-    tipo VARCHAR(10) NOT NULL, -- 'FOTO', 'VIDEO'
+    tipo VARCHAR(10) NOT NULL, -- 'FOTO', 'VIDEO', 'ASSINATURA'
     caminho_arquivo VARCHAR(255) NOT NULL, -- URL segura S3 / Storage
     criado_em TIMESTAMP DEFAULT NOW()
 );
