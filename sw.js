@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lavacar-pwa-v21';
+const CACHE_NAME = 'lavacar-pwa-v22';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,8 +17,10 @@ const ASSETS_TO_CACHE = [
   './js/checkin.js',
   './js/dashboard.js',
   './js/kanban.js',
+  './js/agenda.js',
   './js/services.js',
   './js/clients.js',
+  './js/sincronia.js',
   './js/reports.js',
   './js/products.js',
   './js/main.js'
@@ -58,6 +60,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Only intercept GET requests
   if (event.request.method !== 'GET') return;
+  // Dados da API do Supabase nunca vêm do cache: evita agenda/sincronização desatualizadas
+  if (new URL(event.request.url).hostname.endsWith('.supabase.co')) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {

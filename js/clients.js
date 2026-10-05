@@ -970,6 +970,7 @@ async function triggerManualSync(opts) {
         }
     } finally {
         syncEmAndamento = false;
+        if (typeof atualizarIndicadorSync === 'function') atualizarIndicadorSync();
     }
 }
 
@@ -1163,9 +1164,9 @@ async function refreshFromCloud(opts) {
     }
 }
 
+// Recebe as atualizações da equipe (todos os perfis ativos; o RLS restringe à equipe)
 async function autoPullFromCloud() {
     try {
-        if (typeof isGerente === 'function' && !isGerente()) return;
         const r = await pullCloudProcessos();
         await pullCloudMidias();
         if (r.merged) {

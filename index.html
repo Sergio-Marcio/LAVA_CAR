@@ -148,9 +148,9 @@
 
             <div class="flex items-center space-x-2">
                 <!-- Status Pill -->
-                <div id="status-pill" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span id="status-text">Online</span>
+                <div id="status-pill" role="button" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <span class="w-2 h-2 rounded-full bg-slate-400 animate-pulse"></span>
+                    <span id="status-text">LOCAL</span>
                 </div>
 
                 <!-- User Badge -->
@@ -217,6 +217,23 @@
                     <button onclick="loadSeedData()" title="Carregar Exemplo de Serviços e Clientes" class="touch-target px-3 py-3 bg-brand-800/60 hover:bg-brand-800 text-white rounded-xl transition flex items-center justify-center">
                         <i data-lucide="sparkles" class="w-5 h-5"></i>
                     </button>
+                </div>
+            </div>
+
+            <!-- Agenda do Dia -->
+            <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="calendar-clock" class="w-5 h-5 text-brand-500"></i> Agenda
+                        <span id="agenda-contador" class="min-w-[1.5rem] h-6 px-1.5 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 text-xs font-bold flex items-center justify-center">0</span>
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <input type="date" id="agenda-data" onchange="loadAgenda()" class="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none">
+                        <button onclick="openModalAgendamento()" class="touch-target px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl flex items-center gap-1"><i data-lucide="plus" class="w-4 h-4"></i> Agendar</button>
+                    </div>
+                </div>
+                <div id="agenda-lista" class="space-y-2">
+                    <p class="text-xs text-slate-400 py-3 text-center">Carregando agenda...</p>
                 </div>
             </div>
 
@@ -806,9 +823,62 @@
                 </div>
             </div>
 
+            <!-- Configuração da Agenda (Gerente) -->
+            <div id="agenda-config" class="gerente-only bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2"><i data-lucide="calendar-cog" class="w-4 h-4 text-brand-500"></i> Agenda e Agendamento Online</h4>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input id="agcfg-link" readonly class="flex-1 p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs font-mono outline-none">
+                    <button type="button" onclick="copiarLinkAgenda()" class="touch-target px-4 py-2 bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1 justify-center"><i data-lucide="copy" class="w-4 h-4"></i> Copiar link para clientes</button>
+                </div>
+                <form onsubmit="event.preventDefault(); salvarAgendaConfig();" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <label class="col-span-2 sm:col-span-4 flex items-center gap-2 font-bold"><input type="checkbox" id="agcfg-ativo" class="w-4 h-4 accent-emerald-600"> Página pública de agendamento ativa</label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Abertura</span><input type="time" id="agcfg-abertura" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Fechamento</span><input type="time" id="agcfg-fechamento" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Duração (min)</span><input type="number" min="15" max="480" step="15" id="agcfg-duracao" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Vagas por horário</span><input type="number" min="1" max="50" id="agcfg-vagas" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Antecedência mín. (h)</span><input type="number" min="0" id="agcfg-ant-min" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Até (dias à frente)</span><input type="number" min="1" max="365" id="agcfg-ant-max" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Limite por telefone/dia</span><input type="number" min="1" id="agcfg-lim-tel" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1"><span class="block font-bold uppercase text-slate-500">Tentativas por IP/hora</span><input type="number" min="1" id="agcfg-lim-ip" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <label class="space-y-1 col-span-2 sm:col-span-1"><span class="block font-bold uppercase text-slate-500">Máx. online por dia</span><input type="number" min="0" id="agcfg-lim-dia" class="w-full p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg"></label>
+                    <div class="col-span-2 sm:col-span-3 space-y-1">
+                        <span class="block font-bold uppercase text-slate-500">Dias de atendimento</span>
+                        <div class="flex flex-wrap gap-2">
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="1">Seg</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="2">Ter</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="3">Qua</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="4">Qui</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="5">Sex</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="6">Sáb</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" class="agcfg-dia" value="0">Dom</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="col-span-2 sm:col-span-4 touch-target py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl">Salvar configuração da agenda</button>
+                </form>
+                <div class="space-y-2 text-xs">
+                    <span class="block font-bold uppercase text-slate-500">Feriados / dias fechados</span>
+                    <div class="flex gap-2">
+                        <input type="date" id="agcfg-feriado-data" class="p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg">
+                        <input type="text" id="agcfg-feriado-desc" placeholder="Descrição" class="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border rounded-lg">
+                        <button type="button" onclick="adicionarFeriado()" class="px-3 bg-slate-800 text-white font-bold rounded-lg">Adicionar</button>
+                    </div>
+                    <ul id="agcfg-feriados" class="divide-y divide-slate-100 dark:divide-slate-800"></ul>
+                </div>
+            </div>
+
             <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
                 <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">Ações de Banco de Dados</h4>
                 <div id="ultima-sincronia-badge" class="text-[11px] text-slate-500 dark:text-slate-400">Última sincronização: <span id="ultima-sincronia-valor">nunca</span></div>
+                <div class="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <div class="flex-1 min-w-[180px]">
+                        <p class="text-xs font-bold text-slate-800 dark:text-slate-100">Sincronização automática</p>
+                        <p class="text-[10px] text-slate-500">Os dados sempre ficam salvos no aparelho (LOCAL). Ligada, o app envia e recebe da NUVEM sozinho: após cada alteração, quando a internet volta e a cada minuto.</p>
+                    </div>
+                    <div class="flex rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
+                        <button type="button" id="sync-auto-sim" onclick="definirSyncAutomatica(true)">SIM</button>
+                        <button type="button" id="sync-auto-nao" onclick="definirSyncAutomatica(false)">NÃO</button>
+                    </div>
+                </div>
                 <div class="flex flex-wrap gap-3">
                     <button onclick="triggerManualSync()" title="Envia processos pendentes para a nuvem e recebe atualizações em seguida. (requer gerente)" class="touch-target px-4 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs flex items-center gap-2 hover:bg-brand-500 transition">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i> 📡 Sincronizar Tudo
@@ -1130,6 +1200,59 @@
         </div>
     </div>
 
+    <!-- MODAL: NOVO AGENDAMENTO (INTERNO) -->
+    <div id="modal-agendamento" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><i data-lucide="calendar-plus" class="w-5 h-5 text-brand-500"></i> Novo Agendamento</h3>
+                <button type="button" onclick="closeModalAgendamento()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="ag-form" onsubmit="event.preventDefault(); salvarAgendamento();" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Cliente *</label>
+                    <input type="text" id="ag-nome" required class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none font-bold">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Telefone</label>
+                        <input type="tel" id="ag-telefone" placeholder="(11) 99999-9999" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Placa</label>
+                        <input type="text" id="ag-placa" maxlength="8" placeholder="ABC1D23" class="uppercase w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Serviço</label>
+                    <select id="ag-servico" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Data *</label>
+                        <input type="date" id="ag-data" required class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Horário *</label>
+                        <select id="ag-hora" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-mono outline-none"></select>
+                    </div>
+                </div>
+                <div id="ag-bypass-wrap" class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 space-y-2">
+                    <label class="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-200"><input type="checkbox" id="ag-bypass" class="w-4 h-4 accent-amber-600"> Encaixe: ignorar horário, feriado e lotação</label>
+                    <input type="time" id="ag-hora-livre" class="w-full p-2 bg-white dark:bg-slate-800 border rounded-lg text-sm font-mono" title="Horário livre (só com encaixe)">
+                    <p class="text-[10px] text-amber-700 dark:text-amber-300">Somente Gerente e Lavador Sênior. Com encaixe, o horário livre acima substitui o da lista.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Observações</label>
+                    <input type="text" id="ag-obs" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm outline-none">
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="closeModalAgendamento()" class="touch-target px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
+                    <button type="submit" id="ag-salvar" class="touch-target px-5 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow">Agendar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: MOVER ETAPA NO KANBAN (TÉCNICO, BOX, CURA) -->
     <div id="modal-etapa" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-2xl">
@@ -1248,8 +1371,10 @@
     <script src="js/checkin.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/kanban.js"></script>
+    <script src="js/agenda.js"></script>
     <script src="js/services.js"></script>
     <script src="js/clients.js"></script>
+    <script src="js/sincronia.js"></script>
     <script src="js/reports.js"></script>
     <script src="js/products.js"></script>
     <script src="js/main.js"></script>

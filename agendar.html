@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Agende sua lavagem • LAVA_CAR</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+    <main class="max-w-lg mx-auto p-4 space-y-4">
+        <header class="text-center py-4">
+            <div class="w-14 h-14 mx-auto bg-sky-700 rounded-2xl flex items-center justify-center text-white text-2xl font-extrabold shadow-lg">LC</div>
+            <h1 class="text-xl font-extrabold mt-3">Agende sua lavagem</h1>
+            <p class="text-xs text-slate-500">Escolha o serviço, o dia e o horário disponível.</p>
+        </header>
+
+        <div id="pub-erro-geral" class="hidden p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-bold text-center"></div>
+
+        <form id="pub-form" class="hidden space-y-4" novalidate>
+            <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                <h2 class="text-xs font-bold uppercase text-slate-500">1. Serviço</h2>
+                <select id="pub-servico" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"></select>
+            </section>
+
+            <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h2 class="text-xs font-bold uppercase text-slate-500">2. Dia</h2>
+                <div id="pub-dias" class="flex gap-2 overflow-x-auto pb-1"></div>
+                <h2 class="text-xs font-bold uppercase text-slate-500 pt-1">3. Horário</h2>
+                <div id="pub-horas" class="grid grid-cols-4 gap-2"></div>
+            </section>
+
+            <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h2 class="text-xs font-bold uppercase text-slate-500">4. Seus dados</h2>
+                <input id="pub-nome" required maxlength="100" autocomplete="name" placeholder="Nome completo" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                <input id="pub-telefone" required type="tel" autocomplete="tel" placeholder="WhatsApp com DDD" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                <input id="pub-placa" maxlength="8" placeholder="Placa do veículo (opcional)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono uppercase">
+                <textarea id="pub-obs" maxlength="500" rows="2" placeholder="Observações (opcional)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"></textarea>
+                <!-- Campo armadilha para robôs: invisível para pessoas -->
+                <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">
+                    <label>Site <input id="pub-site" name="site" tabindex="-1" autocomplete="off"></label>
+                </div>
+            </section>
+
+            <p id="pub-erro" class="hidden p-3 rounded-xl bg-rose-50 text-rose-700 text-sm font-bold"></p>
+            <button id="pub-enviar" type="submit" class="w-full py-4 bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg">Confirmar agendamento</button>
+            <p class="text-[10px] text-center text-slate-400">Seus dados são usados apenas para este agendamento.</p>
+        </form>
+
+        <section id="pub-sucesso" class="hidden bg-white p-6 rounded-2xl border border-emerald-200 shadow-sm text-center space-y-2">
+            <div class="w-14 h-14 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl">✓</div>
+            <h2 class="text-lg font-extrabold">Agendamento recebido!</h2>
+            <p id="pub-sucesso-texto" class="text-sm text-slate-600"></p>
+            <p class="text-xs text-slate-500">Protocolo <strong id="pub-protocolo" class="font-mono text-slate-900"></strong></p>
+            <button type="button" onclick="location.reload()" class="mt-2 text-sm text-sky-700 font-bold">Fazer outro agendamento</button>
+        </section>
+
+        <p id="pub-carregando" class="text-center text-sm text-slate-400 py-8">Carregando horários...</p>
+    </main>
+    <script src="js/agendar-publico.js"></script>
+</body>
+</html>

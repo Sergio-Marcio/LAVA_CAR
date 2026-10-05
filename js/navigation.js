@@ -6,6 +6,7 @@ window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
 function updateConnectionStatus() {
+    if (typeof atualizarIndicadorSync === 'function') return atualizarIndicadorSync();
     const pill = document.getElementById('status-pill');
     const txt = document.getElementById('status-text');
     if (navigator.onLine) {
@@ -43,7 +44,10 @@ function switchTab(tab) {
         }
     });
 
-    if (tab === 'dashboard') loadDashboardData();
+    if (tab === 'dashboard') {
+        loadDashboardData();
+        if (typeof loadAgenda === 'function') loadAgenda();
+    }
     if (tab === 'services') loadServicesTab();
     if (tab === 'reports') {
         const today = new Date().toISOString().split('T')[0];
@@ -57,7 +61,10 @@ function switchTab(tab) {
         loadLavadoresDropdown();
         if (currentStep === 1) renderServicesSelectorsInWizard();
     }
-    if (tab === 'settings') loadTeam();
+    if (tab === 'settings') {
+        loadTeam();
+        if (typeof loadAgendaConfig === 'function') loadAgendaConfig();
+    }
 }
 
 function toggleTheme() {

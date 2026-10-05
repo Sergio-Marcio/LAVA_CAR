@@ -159,19 +159,16 @@ async function saveInspectionRDP() {
     await tx.done;
 
     showToast('Entrada do Veículo registrada com sucesso!', 'success');
+    const autoSync = typeof syncAutomaticaAtiva !== 'function' || syncAutomaticaAtiva();
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        showToast('Registro salvo offline — será sincronizado automaticamente quando você voltar à internet.', 'info');
+        showToast(autoSync
+            ? 'Registro salvo neste aparelho (LOCAL) — será enviado automaticamente quando a internet voltar.'
+            : 'Registro salvo neste aparelho (LOCAL). Sincronização automática desligada: use "Sincronizar Tudo".', 'info');
     }
     resetRdpForm();
     switchTab('dashboard');
 
-    if (typeof navigator !== 'undefined' && navigator.onLine && typeof triggerManualSync === 'function') {
-        setTimeout(function () {
-            try {
-                triggerManualSync({ allowCurrentUserPushOnly: true, silentErrors: false }).catch(function () {});
-            } catch (_) {}
-        }, 150);
-    }
+    if (typeof agendarSyncAutomatica === 'function') agendarSyncAutomatica(300);
 }
 
 function resetRdpForm() {

@@ -34,6 +34,7 @@ function marcarPendente(p) {
     p.synced = false;
     p.local_revision = (p.local_revision || 0) + 1;
     if (!p.sync_id) p.sync_id = novoSyncId();
+    if (typeof agendarSyncAutomatica === 'function') agendarSyncAutomatica();
     return p;
 }
 
