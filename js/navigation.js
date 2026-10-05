@@ -64,6 +64,7 @@ function switchTab(tab) {
     if (tab === 'settings') {
         loadTeam();
         if (typeof loadAgendaConfig === 'function') loadAgendaConfig();
+        if (typeof carregarNomeEmpresa === 'function') carregarNomeEmpresa();
     }
 }
 

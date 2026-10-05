@@ -1,5 +1,6 @@
 // Initialize Application: Auth first, then Database & Initial View
 window.addEventListener('DOMContentLoaded', async () => {
+    if (typeof carregarNomeEmpresa === 'function') carregarNomeEmpresa();
     await initAuth();
     await initDB();
     if (typeof iniciarSincroniaAutomatica === 'function') iniciarSincroniaAutomatica();

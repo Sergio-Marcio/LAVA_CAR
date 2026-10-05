@@ -5,6 +5,8 @@
   "type": "module",
   "description": "LAVA_CAR Pro - Sistema RDP & Controle de Lavagens (testes apenas)",
   "scripts": {
+    "dev": "npx serve -l 3000 .",
+    "start": "npx serve -l 3000 .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

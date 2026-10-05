@@ -270,7 +270,7 @@ async function viewDetails(id) {
     // Setup Printable Ticket Content
     if (printEl) {
         printEl.innerText = `===================================
-LAVA_CAR PRO RDP
+${toUpper(typeof getNomeEmpresa === 'function' ? getNomeEmpresa() : 'LAVA_CAR')}
 ===================================
 COMPROVANTE DE SERVIÇOS
 -----------------------------------

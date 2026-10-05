@@ -62,7 +62,7 @@
                 <div class="w-14 h-14 mx-auto bg-brand-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-brand-500/30">
                     <i data-lucide="car" class="w-8 h-8"></i>
                 </div>
-                <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">LAVA_CAR Pro</h2>
+                <h2 data-empresa-nome class="text-xl font-extrabold text-slate-900 dark:text-white">LAVA_CAR</h2>
                 <p class="text-xs text-slate-500">Entre com seu e-mail e senha</p>
             </div>
 
@@ -140,7 +140,7 @@
                 </div>
                 <div>
                     <h1 class="text-lg font-bold leading-tight text-slate-900 dark:text-white flex items-center gap-2">
-                        LAVA_CAR <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">PRO v2.0</span>
+                        <span data-empresa-nome class="truncate max-w-[180px] sm:max-w-xs">LAVA_CAR</span> <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">PRO v2.0</span>
                     </h1>
                     <p class="text-xs text-slate-500 dark:text-slate-400">Entrada, Saída, Preços & RDP</p>
                 </div>
@@ -214,8 +214,8 @@
                     <button onclick="switchTab('new')" class="touch-target flex-1 md:flex-initial px-6 py-3 bg-white text-brand-700 font-bold rounded-xl shadow hover:bg-brand-50 transition flex items-center justify-center gap-2">
                         <i data-lucide="plus-circle" class="w-5 h-5"></i> Dar Entrada (Nova RDP)
                     </button>
-                    <button onclick="loadSeedData()" title="Carregar Exemplo de Serviços e Clientes" class="touch-target px-3 py-3 bg-brand-800/60 hover:bg-brand-800 text-white rounded-xl transition flex items-center justify-center">
-                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    <button onclick="loadSeedData()" title="Carregar Exemplo de Serviços e Clientes" class="touch-target p-1 bg-black hover:ring-2 hover:ring-cyan-300 rounded-xl transition flex items-center justify-center overflow-hidden">
+                        <img src="images/carro_ico.jpg" alt="Carregar exemplo" class="h-10 w-auto rounded-lg object-cover">
                     </button>
                 </div>
             </div>
@@ -775,6 +775,16 @@
             <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <i data-lucide="settings" class="w-5 h-5 text-brand-500"></i> Gestão do Banco de Dados & Opções
             </h3>
+
+            <!-- Identidade da Empresa (Gerente) -->
+            <div class="gerente-only bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2"><i data-lucide="building-2" class="w-4 h-4 text-brand-500"></i> Nome da Empresa</h4>
+                <form onsubmit="event.preventDefault(); salvarNomeEmpresa();" class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" id="cfg-empresa-nome" maxlength="60" placeholder="Ex: ROTA 69" class="flex-1 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-brand-500">
+                    <button type="submit" class="touch-target px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl">Salvar nome</button>
+                </form>
+                <p class="text-[10px] text-slate-400">Aparece no cabeçalho do app, na tela de login, no comprovante impresso e na página de agendamento online.</p>
+            </div>
 
             <!-- EQUIPE & PERFIS (somente gerente) -->
             <div class="gerente-only bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
@@ -1361,6 +1371,7 @@
 
     <!-- Application Scripts (ordem de carregamento importa) -->
     <script src="js/core.js"></script>
+    <script src="js/empresa.js"></script>
     <script src="js/auth-utils.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/db.js"></script>

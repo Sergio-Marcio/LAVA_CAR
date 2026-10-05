@@ -14,6 +14,12 @@ function pubDateKey(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function pubSigla(nome) {
+    const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
+    const sigla = partes.length > 1 ? partes[0][0] + partes[1][0] : (partes[0] || 'LC').slice(0, 2);
+    return sigla.toUpperCase();
+}
+
 function pubEsc(v) {
     return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -101,6 +107,12 @@ async function pubIniciar() {
     if (typeof supabase === 'undefined') return;
     const sb = supabase.createClient(PUB_SUPABASE_URL, PUB_SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     const carregando = document.getElementById('pub-carregando');
+    sb.from('empresa_config').select('nome').eq('id', 1).maybeSingle().then(({ data }) => {
+        if (!data?.nome) return;
+        document.getElementById('pub-empresa-nome').textContent = data.nome;
+        document.getElementById('pub-empresa-sigla').textContent = pubSigla(data.nome);
+        document.title = `Agende sua lavagem • ${data.nome}`;
+    }).catch(() => {});
     try {
         const { data: info, error } = await sb.rpc('agenda_publica_info');
         if (error) throw error;
