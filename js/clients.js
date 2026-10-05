@@ -386,6 +386,7 @@ function quickStartRdpForClient(nome, placa, tel) {
         if (inpCliente) inpCliente.value = nome || '';
         if (inpPlaca && placa) inpPlaca.value = placa || '';
         if (inpTel && tel) inpTel.value = tel || '';
+        if (inpPlaca && placa && typeof onPlacaInput === 'function') onPlacaInput({ target: inpPlaca });
         showToast(`Dados de ${nome} preenchidos na Nova RDP!`, 'info');
     }, 150);
 }

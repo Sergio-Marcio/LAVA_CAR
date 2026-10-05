@@ -1,6 +1,6 @@
 // --- REVISION SUMMARY ---
 async function updateReviewSummary() {
-    const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+    const placa = formatarPlaca(document.getElementById('inp-placa').value);
     const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
     const allServices = await db.getAll('servicos');
 
@@ -37,7 +37,7 @@ async function updateReviewSummary() {
 
 // --- SAVE NEW ENTRADA (CHECK-IN) ---
 async function saveInspectionRDP() {
-    const placa = document.getElementById('inp-placa').value.toUpperCase().trim();
+    const placa = normalizarPlaca(document.getElementById('inp-placa').value);
     const cliente = toUpper(document.getElementById('inp-cliente').value.trim());
     const modelo = toUpper(document.getElementById('inp-modelo').value.trim());
     const telefone = document.getElementById('inp-telefone').value.trim();
@@ -176,6 +176,7 @@ async function saveInspectionRDP() {
 
 function resetRdpForm() {
     document.getElementById('rdp-form').reset();
+    ['placa-status', 'placa-historico'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     for (const m of currentInspectionMedia) {
         if (m && typeof m.url === 'string' && m.url.startsWith('blob:')) {
             try { URL.revokeObjectURL(m.url); } catch (_) {}

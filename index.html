@@ -282,7 +282,8 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Placa do Veículo *</label>
-                            <input type="text" id="inp-placa" required placeholder="Ex: ABC1D23 ou ABC-1234" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-mono font-bold uppercase tracking-wider focus:ring-2 focus:ring-brand-500 outline-none">
+                            <input type="text" id="inp-placa" required maxlength="8" autocomplete="off" oninput="onPlacaInput(event)" placeholder="Ex: ABC1D23 ou ABC1234" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-mono font-bold uppercase tracking-wider focus:ring-2 focus:ring-brand-500 outline-none">
+                            <p id="placa-status" class="text-[11px] mt-1 min-h-[1rem]"></p>
                         </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Nome do Cliente *</label>
@@ -303,6 +304,7 @@
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">A comissão (taxa por carro e/ou % do serviço) é apurada automaticamente no relatório.</p>
                         </div>
+                        <div id="placa-historico" class="md:col-span-2 space-y-2"></div>
                     </div>
                 </div>
 
@@ -1240,6 +1242,7 @@
     <script src="js/auth.js"></script>
     <script src="js/db.js"></script>
     <script src="js/navigation.js"></script>
+    <script src="js/placa.js"></script>
     <script src="js/wizard.js"></script>
     <script src="js/media.js"></script>
     <script src="js/checkin.js"></script>

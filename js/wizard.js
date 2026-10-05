@@ -28,13 +28,14 @@ function setStep(step) {
     if (step === 5) updateReviewSummary();
 }
 
-function nextStep() {
+async function nextStep() {
     if (currentStep === 1) {
         const placa = document.getElementById('inp-placa').value.trim();
         const cliente = document.getElementById('inp-cliente').value.trim();
         const lavador = document.getElementById('inp-lavador').value;
         if (!placa || !cliente) return showToast('Digite a Placa e o Cliente', 'error');
         if (!lavador) return showToast('Selecione o Lavador Responsável', 'error');
+        if (typeof validarPlacaParaEntrada === 'function' && !(await validarPlacaParaEntrada(placa))) return;
     }
     if (currentStep === 2) {
         if (!selectedWashId) return showToast('Selecione um Tipo de Lavagem', 'error');
