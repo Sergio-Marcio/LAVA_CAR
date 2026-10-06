@@ -87,3 +87,7 @@ function escapeHtml(value) {
     }[ch]));
 }
 
+if (typeof window !== 'undefined') {
+    window.escapeHtml = escapeHtml;
+}
+

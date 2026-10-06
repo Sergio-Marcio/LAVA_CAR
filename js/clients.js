@@ -213,7 +213,7 @@ function renderClientsHtml(list) {
                         </h4>
                         <div class="flex items-center gap-2 mt-0.5">
                             ${hasTel ? `
-                                <a href="https://wa.me/55${telDigits}" target="_blank" title="Enviar WhatsApp" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1">
+                                <a href="https://wa.me/55${telDigits}" target="_blank" rel="noopener noreferrer" title="Enviar WhatsApp" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1">
                                     <i data-lucide="phone" class="w-3 h-3"></i> ${telSafe}
                                 </a>
                             ` : `
@@ -243,10 +243,10 @@ function renderClientsHtml(list) {
 
             <!-- Ações Rápidas -->
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                <button type="button" onclick="quickStartRdpForClient('${escapeHtml(c.nome)}', '${escapeHtml(firstVehiclePlate)}', '${escapeHtml(telVal)}')" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-500 flex items-center gap-1 transition">
+                <button type="button" onclick="quickStartRdpForClient(${c.id})" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-500 flex items-center gap-1 transition">
                     <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Nova RDP
                 </button>
-                <button type="button" onclick="deleteClient(${c.id}, '${escapeHtml(c.nome)}')" title="Excluir Cliente" class="text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg transition">
+                <button type="button" onclick="deleteClient(${c.id})" title="Excluir Cliente" class="text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg transition">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                 </button>
             </div>
@@ -363,7 +363,12 @@ async function saveClient() {
 
 async function deleteClient(id, nome) {
     if (!id) return;
-    if (!confirm(`Deseja realmente remover o cliente "${nome}" do cadastro?`)) return;
+    if (!nome && Array.isArray(cachedClientsList)) {
+        const c = cachedClientsList.find(x => x.id === id);
+        if (c && c.nome) nome = c.nome;
+    }
+    const nomeExibicao = nome || 'este cliente';
+    if (!confirm(`Deseja realmente remover o cliente "${nomeExibicao}" do cadastro?`)) return;
 
     try {
         const tx = db.transaction('clientes', 'readwrite');
@@ -377,7 +382,24 @@ async function deleteClient(id, nome) {
     }
 }
 
-function quickStartRdpForClient(nome, placa, tel) {
+function quickStartRdpForClient(arg1, arg2, arg3) {
+    let nome = '';
+    let placa = '';
+    let tel = '';
+
+    if (typeof arg1 === 'number' || (typeof arg1 === 'string' && /^\d+$/.test(arg1))) {
+        const clientObj = (cachedClientsList || []).find(c => c.id === Number(arg1));
+        if (clientObj) {
+            nome = clientObj.nome || '';
+            tel = clientObj.telefone || '';
+            placa = (clientObj.vehicles && clientObj.vehicles.length > 0) ? clientObj.vehicles[0].placa : '';
+        }
+    } else {
+        nome = arg1 || '';
+        placa = arg2 || '';
+        tel = arg3 || '';
+    }
+
     switchTab('new');
     setTimeout(() => {
         const inpCliente = document.getElementById('inp-cliente');

@@ -521,41 +521,61 @@ async function loadTeam() {
         .order('criado_em', { ascending: true });
 
     if (error) {
-        container.innerHTML = `<p class="text-xs text-rose-500 py-4">Erro ao carregar equipe: ${error.message}</p>`;
+        container.innerHTML = `<p class="text-xs text-rose-500 py-4">Erro ao carregar equipe: ${typeof escapeHtml === 'function' ? escapeHtml(error.message) : error.message}</p>`;
         return;
     }
 
-    container.innerHTML = equipe.map(m => `
+    cachedEquipe = equipe || [];
+
+    container.innerHTML = cachedEquipe.map(m => {
+        const esc = typeof escapeHtml === 'function' ? escapeHtml : (v => String(v ?? ''));
+        const nomeSafe = esc(m.nome || '(sem nome)');
+        const emailSafe = esc(m.email || '');
+        const idSafe = esc(m.id);
+        const initialSafe = esc((m.nome || '?').charAt(0).toUpperCase());
+        const taxaCarro = Number(m.taxa_carro || 0).toFixed(2);
+        const comissaoPct = Number(m.comissao_pct || 0).toFixed(1);
+
+        return `
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 ${m.ativo === false ? 'opacity-50' : ''}">
             <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 ${m.role === 'GERENTE' ? 'bg-brand-600' : m.role === 'LAVADOR_SENIOR' ? 'bg-amber-500' : 'bg-slate-500'}">
-                ${(m.nome || '?').charAt(0).toUpperCase()}
+                ${initialSafe}
             </div>
             <div class="flex-1 min-w-0">
-                <p class="font-bold text-sm text-slate-900 dark:text-white truncate">${m.nome || '(sem nome)'}</p>
-                <p class="text-[11px] text-slate-500 truncate">${m.email || ''}</p>
-                <p class="text-[10px] text-slate-400 mt-0.5">Taxa/carro: <strong class="text-slate-600 dark:text-slate-300">R$ ${(m.taxa_carro || 0).toFixed(2)}</strong> • Comissão: <strong class="text-slate-600 dark:text-slate-300">${(m.comissao_pct || 0).toFixed(1)}%</strong></p>
+                <p class="font-bold text-sm text-slate-900 dark:text-white truncate">${nomeSafe}</p>
+                <p class="text-[11px] text-slate-500 truncate">${emailSafe}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Taxa/carro: <strong class="text-slate-600 dark:text-slate-300">R$ ${taxaCarro}</strong> • Comissão: <strong class="text-slate-600 dark:text-slate-300">${comissaoPct}%</strong></p>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="editCommission('${m.id}', '${(m.nome || '').replace(/'/g, "\\'")}', ${m.taxa_carro || 0}, ${m.comissao_pct || 0})"
+                <button onclick="openEditCommissionModal('${idSafe}')"
                     title="Editar comissão"
                     class="touch-target p-2 rounded-lg text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition">
                     <i data-lucide="badge-percent" class="w-4 h-4"></i>
                 </button>
-                <select onchange="changeTeamRole('${m.id}', this.value)" ${m.id === currentUser.id ? 'disabled' : ''}
+                <select onchange="changeTeamRole('${idSafe}', this.value)" ${m.id === currentUser?.id ? 'disabled' : ''}
                     class="text-xs font-bold px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 outline-none">
                     <option value="GERENTE" ${m.role === 'GERENTE' ? 'selected' : ''}>Gerente</option>
                     <option value="LAVADOR_SENIOR" ${m.role === 'LAVADOR_SENIOR' ? 'selected' : ''}>Lavador Sênior</option>
                     <option value="LAVADOR" ${m.role === 'LAVADOR' ? 'selected' : ''}>Lavador</option>
                 </select>
-                <button onclick="toggleTeamAtivo('${m.id}', ${m.ativo === false})" ${m.id === currentUser.id ? 'disabled' : ''}
+                <button onclick="toggleTeamAtivo('${idSafe}', ${m.ativo === false})" ${m.id === currentUser?.id ? 'disabled' : ''}
                     title="${m.ativo === false ? 'Reativar' : 'Desativar'} usuário"
                     class="touch-target p-2 rounded-lg transition ${m.ativo === false ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40' : 'text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40'} disabled:opacity-30">
                     <i data-lucide="${m.ativo === false ? 'user-check' : 'user-x'}" class="w-4 h-4"></i>
                 </button>
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 
     lucide.createIcons();
+}
+
+let cachedEquipe = [];
+
+function openEditCommissionModal(id) {
+    const m = cachedEquipe.find(x => x.id === id);
+    if (!m) return;
+    editCommission(m.id, m.nome || 'Membro', m.taxa_carro || 0, m.comissao_pct || 0);
 }
 
 async function createEmployee(evt) {

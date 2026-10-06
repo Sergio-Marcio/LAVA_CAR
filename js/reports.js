@@ -196,8 +196,8 @@ async function loadCommissionsReport() {
             ${l.detalhes.map(p => `
             <div class="flex items-center justify-between text-xs py-1">
                 <div class="flex items-center gap-2">
-                    <span class="font-mono font-bold text-slate-700 dark:text-slate-300">${toUpper(p.placa)}</span>
-                    <span class="text-slate-400">${toUpper(p.cliente_nome)}</span>
+                    <span class="font-mono font-bold text-slate-700 dark:text-slate-300">${escapeHtml(toUpper(p.placa))}</span>
+                    <span class="text-slate-400">${escapeHtml(toUpper(p.cliente_nome))}</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-slate-400">Serviço: R$ ${(p.valor_total || 0).toFixed(2)}</span>

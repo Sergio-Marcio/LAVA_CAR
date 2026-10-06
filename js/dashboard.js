@@ -65,7 +65,7 @@ function renderInspectionList(processos) {
         let statusLabel = 'NO PÁTIO (EM ANDAMENTO)';
         if (p.status === 'CONCLUIDO') {
             badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-            statusLabel = `SAÍDA REALIZADA (${p.forma_pagamento || 'PAGO'})`;
+            statusLabel = `SAÍDA REALIZADA (${escapeHtml(p.forma_pagamento || 'PAGO')})`;
         } else if (isCancelled) {
             badgeClass = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
             statusLabel = `SERVIÇO ESTORNADO / CANCELADO`;

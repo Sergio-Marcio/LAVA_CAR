@@ -214,6 +214,7 @@ export function loadAuthAsScript() {
     try { window.loadDashboardStats = loadDashboardStats; } catch (e) {}
     try { window.toggleTeamAtivo = toggleTeamAtivo; } catch (e) {}
     try { window.editCommission = editCommission; } catch (e) {}
+    try { window.openEditCommissionModal = openEditCommissionModal; } catch (e) {}
     try { window.renderLavadoresSelect = renderLavadoresSelect; } catch (e) {}
     try {
       Object.defineProperty(window, 'currentUser', {

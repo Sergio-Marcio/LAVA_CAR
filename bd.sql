@@ -145,3 +145,16 @@ INSERT INTO produtos (nome, valor, nivel, percentual, descricao) VALUES
 ('Desengraxante de Motor 5L', 75.00, 'CHEIO', 100, 'Desengraxante para caixas de roda e motores'),
 ('Cheirinho / Essência Automotiva 1L', 35.00, 'BAIXO', 20, 'Aroma interno para veículos'),
 ('Cristalizador de Para-brisa 500ml', 40.00, 'MEIO', 45, 'Repelente de chuva para vidros');
+
+-- ========================================================
+-- SEGURANÇA: HABILITAÇÃO DE ROW LEVEL SECURITY (RLS)
+-- ========================================================
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE veiculos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE servicos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE boxes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE processos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE processo_servicos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE registros_midia ENABLE ROW LEVEL SECURITY;
+ALTER TABLE achados_internos ENABLE ROW LEVEL SECURITY;
