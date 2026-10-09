@@ -71,10 +71,11 @@ describe('Unit: Kanban de pátio (item 4) — helpers puros', () => {
     expect(est.cura_fim_em).toBe('2026-10-04T13:00:00.000Z');
     expect(est.cura_alertado).toBe(false);
 
-    const qa = k.aplicarMovimentoEtapa(est, 'QA', { agora: '2026-10-04T13:05:00.000Z' });
+    const qa = k.aplicarMovimentoEtapa(est, 'QA', { box: { id: 3, nome: 'Box 3' }, agora: '2026-10-04T13:05:00.000Z' });
     expect(qa.cura_fim_em).toBeNull();
     expect(qa.box_id).toBeNull();
     expect(qa.box_nome).toBeNull();
+    expect(qa.etapas_historico[1].box_id).toBeNull();
 
     const semCura = k.aplicarMovimentoEtapa(base, 'LAVAGEM', { curaMinutos: 60 });
     expect(semCura.cura_fim_em).toBeNull();

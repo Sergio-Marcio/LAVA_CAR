@@ -44,22 +44,21 @@ function aplicarMovimentoEtapa(p, novaEtapa, opts = {}) {
     historico.forEach(h => { if (!h.fim) h.fim = agora; });
 
     const tecnico = opts.tecnico || null;
+    const usaBox = novaEtapa === 'LAVAGEM' || novaEtapa === 'ESTETICA';
     historico.push({
         etapa: novaEtapa,
         inicio: agora,
         fim: null,
         tecnico_id: tecnico?.id ?? null,
         tecnico_nome: tecnico?.nome ?? null,
-        box_id: opts.box?.id ?? null,
-        box_nome: opts.box?.nome ?? null
+        box_id: usaBox ? (opts.box?.id ?? null) : null,
+        box_nome: usaBox ? (opts.box?.nome ?? null) : null
     });
 
     const curaMin = Number(opts.curaMinutos || 0);
     const curaFim = novaEtapa === 'ESTETICA' && curaMin > 0
         ? new Date(new Date(agora).getTime() + curaMin * 60000).toISOString()
         : null;
-
-    const usaBox = novaEtapa === 'LAVAGEM' || novaEtapa === 'ESTETICA';
 
     return marcarPendente({
         ...p,
@@ -326,8 +325,8 @@ async function confirmarMovimentoEtapa() {
     const etapaDestino = document.getElementById('et-etapa-destino').value;
     const selTec = document.getElementById('et-tecnico');
     const selBox = document.getElementById('et-box');
-    const tecOpt = selTec.selectedOptions[0];
-    const boxOpt = selBox.selectedOptions[0];
+    const tecOpt = selTec?.selectedOptions ? selTec.selectedOptions[0] : null;
+    const boxOpt = selBox?.selectedOptions ? selBox.selectedOptions[0] : null;
 
     const tecnico = tecOpt && tecOpt.value ? { id: tecOpt.value, nome: tecOpt.dataset.nome } : null;
     const box = boxOpt && boxOpt.value ? { id: parseInt(boxOpt.value), nome: boxOpt.dataset.nome } : null;

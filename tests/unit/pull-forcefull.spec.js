@@ -179,4 +179,41 @@ describe('Unit: pullCloudProcessos e pullCloudMidias aceitam opts.forceFull', ()
     expect(proc).toContain('or');
     expect(mid).toContain('or');
   });
+
+  it('pullCloudMidias processa linhas da nuvem mapeando com processos locais sem erro de transação', async () => {
+    const mockRows = [
+      { id: 10, processo_id: 100, tipo: 'FOTO', nome: 'frente.jpg', caminho_arquivo: '100/10-frente.jpg', criado_em: '2026-10-09T20:00:00Z' }
+    ];
+    window.sbClient = {
+      auth: { getSession: async () => ({ data: { session: { user: { id: 'uid' } } } }) },
+      from: () => ({
+        select: () => ({
+          order: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: mockRows, error: null })
+            })
+          })
+        })
+      })
+    };
+    window.isGerente = () => true;
+    const addedMidias = [];
+    window.db = {
+      getAll: async (store) => store === 'processos' ? [{ id: 1, cloud_id: 100 }] : [],
+      transaction: () => ({
+        objectStore: () => ({
+          indexNames: { contains: () => false },
+          add: async (item) => { addedMidias.push(item); return 1; },
+          put: async () => {}
+        }),
+        done: Promise.resolve()
+      })
+    };
+    loadClientsWithMock();
+    const result = await window.__pullCloudMidias({ forceFull: true });
+    expect(result.merged).toBe(1);
+    expect(addedMidias).toHaveLength(1);
+    expect(addedMidias[0].processo_id).toBe(1);
+    expect(addedMidias[0].cloud_media_id).toBe(10);
+  });
 });

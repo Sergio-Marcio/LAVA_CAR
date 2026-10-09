@@ -547,18 +547,13 @@ async function syncPendingMidias() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) return { synced: 0, skipped: 0 };
 
-    const tx = db.transaction(['registros_midia', 'processos'], 'readwrite');
-    const mStore = tx.objectStore('registros_midia');
-    const pStore = tx.objectStore('processos');
-    const idxByProcesso = mStore.index('processo_id');
-
-    const processos = await pStore.getAll();
+    const processos = (await db.getAll('processos')) || [];
     const processosById = new Map(processos.map(p => [p.id, p]));
 
     let synced = 0;
     let skipped = 0;
 
-    const allMidias = await mStore.getAll();
+    const allMidias = (await db.getAll('registros_midia')) || [];
     const pendentes = allMidias.filter(m => m && m.synced === false && m.blob);
 
     for (const m of pendentes) {
@@ -604,11 +599,10 @@ async function syncPendingMidias() {
         m.cloud_media_id = inserted?.id || m.cloud_media_id || null;
         m.caminho_arquivo = path;
         m.synced = true;
-        await mStore.put(m);
+        await db.put('registros_midia', m);
         synced++;
     }
 
-    await tx.done;
     return { synced, skipped };
 }
 
@@ -663,43 +657,32 @@ async function pullCloudMidias(opts) {
         if (!rows || rows.length === 0) break;
         pages++;
 
-        const tProc = db.transaction('processos', 'readonly');
-        const pStore = tProc.objectStore('processos');
-        let pIdx = null;
-        let procByCloud = null;
-        try {
-            pIdx = pStore.index('cloud_id');
-        } catch (e) {
-            pIdx = null;
+        const allLocal = (await db.getAll('processos')) || [];
+        const procByCloud = new Map();
+        for (const p of allLocal) {
+            if (p?.cloud_id != null) procByCloud.set(p.cloud_id, p);
         }
 
-        if (!pIdx) {
-            const allLocal = await pStore.getAll();
-            procByCloud = new Map();
-            for (const p of allLocal) {
-                if (p?.cloud_id != null) procByCloud.set(p.cloud_id, p);
-            }
+        const allMidias = (await db.getAll('registros_midia')) || [];
+        const midiasByCloudId = new Map();
+        for (const m of allMidias) {
+            if (m?.cloud_media_id != null) midiasByCloudId.set(m.cloud_media_id, m);
         }
-        await tProc.done;
 
         const tx = db.transaction('registros_midia', 'readwrite');
         const mStore = tx.objectStore('registros_midia');
-        const mIdx = mStore.indexNames.contains('cloud_media_id') ? mStore.index('cloud_media_id') : null;
 
         for (const row of rows) {
             const cloudMediaId = row.id;
             const cloudProcId = row.processo_id;
             if (cloudMediaId == null || cloudProcId == null) continue;
 
-            const localProc = pIdx ? await pIdx.get(cloudProcId) : procByCloud.get(cloudProcId);
+            const localProc = procByCloud.get(cloudProcId);
             if (!localProc?.id) {
                 continue;
             }
 
-            let existing = null;
-            if (mIdx) {
-                existing = await mIdx.get(cloudMediaId);
-            }
+            let existing = midiasByCloudId.get(cloudMediaId);
 
             const mapped = {
                 processo_id: localProc.id,
@@ -712,9 +695,13 @@ async function pullCloudMidias(opts) {
             };
 
             if (existing && existing.id != null) {
-                await mStore.put({ ...existing, ...mapped, id: existing.id });
+                const updated = { ...existing, ...mapped, id: existing.id };
+                await mStore.put(updated);
+                midiasByCloudId.set(cloudMediaId, updated);
             } else {
-                await mStore.add(mapped);
+                const toAdd = { ...mapped };
+                const newId = await mStore.add(toAdd);
+                midiasByCloudId.set(cloudMediaId, { ...toAdd, id: newId });
             }
             merged++;
         }
@@ -763,28 +750,12 @@ async function pullCloudProcessos(opts) {
         cursorId = null;
     }
 
-    let hasCloudIdIndex = false;
-    try {
-        const t = db.transaction('processos', 'readonly');
-        hasCloudIdIndex = t.objectStore('processos').indexNames.contains('cloud_id');
-        await t.done;
-    } catch (e) {
-        hasCloudIdIndex = false;
-    }
-
-    let byCloudId = null;
-    if (!hasCloudIdIndex) {
-        byCloudId = new Map();
-        try {
-            const t = db.transaction('processos', 'readonly');
-            const allLocal = await t.objectStore('processos').getAll();
-            await t.done;
-            for (const p of allLocal) {
-                if (p && p.cloud_id != null) byCloudId.set(p.cloud_id, p);
-            }
-        } catch (e) {
-            byCloudId = new Map();
-        }
+    const allLocal = (await db.getAll('processos')) || [];
+    const byCloudId = new Map();
+    const bySyncId = new Map();
+    for (const p of allLocal) {
+        if (p && p.cloud_id != null) byCloudId.set(p.cloud_id, p);
+        if (p && p.sync_id) bySyncId.set(p.sync_id, p);
     }
 
     const pageSize = 500;
@@ -815,17 +786,14 @@ async function pullCloudProcessos(opts) {
 
         const tx = db.transaction('processos', 'readwrite');
         const store = tx.objectStore('processos');
-        const idx = hasCloudIdIndex ? store.index('cloud_id') : null;
-        const syncIdx = typeof store.indexNames?.contains === 'function' && store.indexNames.contains('sync_id')
-            ? store.index('sync_id') : null;
 
         for (const row of rows) {
             const cloudId = row.id;
             if (cloudId == null) continue;
 
-            let existing = idx ? await idx.get(cloudId) : byCloudId.get(cloudId);
+            let existing = byCloudId.get(cloudId);
             // Insert anterior gravou na nuvem mas a resposta se perdeu: reconcilia pelo UUID em vez de duplicar localmente
-            if (!existing && row.sync_id && syncIdx) existing = await syncIdx.get(row.sync_id);
+            if (!existing && row.sync_id) existing = bySyncId.get(row.sync_id);
             const mapped = mapProcessoFromCloud(row);
 
             if (existing && existing.id != null) {
@@ -834,12 +802,15 @@ async function pullCloudProcessos(opts) {
                     ? { ...existing, cloud_id: cloudId, sync_id: existing.sync_id || mapped.sync_id, cloud_updated_at: mapped.cloud_updated_at }
                     : { ...existing, ...mapped, id: existing.id };
                 await store.put(updated);
-                if (!idx) byCloudId.set(cloudId, updated);
+                byCloudId.set(cloudId, updated);
+                if (updated.sync_id) bySyncId.set(updated.sync_id, updated);
             } else {
                 const toAdd = { ...mapped };
                 delete toAdd.id;
                 const newId = await store.add(toAdd);
-                if (!idx) byCloudId.set(cloudId, { ...toAdd, id: newId });
+                const saved = { ...toAdd, id: newId };
+                byCloudId.set(cloudId, saved);
+                if (saved.sync_id) bySyncId.set(saved.sync_id, saved);
             }
 
             merged++;
