@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lavacar-pwa-v30';
+const CACHE_NAME = 'lavacar-pwa-v31';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -34,7 +34,8 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Caching app shell');
-      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+      // cache: 'reload' ignora o cache HTTP do navegador para não reempacotar arquivos antigos
+      return cache.addAll(ASSETS_TO_CACHE.map((u) => new Request(u, { cache: 'reload' }))).catch((err) => {
         console.warn('[Service Worker] Failed to cache some assets on install:', err);
       });
     })
@@ -65,6 +66,29 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   // Dados da API do Supabase nunca vêm do cache: evita agenda/sincronização desatualizadas
   if (new URL(event.request.url).hostname.endsWith('.supabase.co')) return;
+
+  // Arquivos do próprio app (HTML/JS/CSS): rede primeiro, cache só como fallback offline.
+  // Evita que uma versão quebrada fique presa no cache após um deploy corrigido.
+  const url = new URL(event.request.url);
+  const dest = event.request.destination;
+  if (url.origin === self.location.origin && (event.request.mode === 'navigate' || dest === 'script' || dest === 'style')) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-cache' }).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+        }
+        return networkResponse;
+      }).catch(() => caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          return caches.match('./offline.html').then((r) => r || caches.match('./index.html'));
+        }
+        return Response.error();
+      }))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
