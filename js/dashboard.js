@@ -197,7 +197,7 @@ async function viewDetails(id) {
         const rawUrl = m?.url || '';
         const missing = typeof rawUrl === 'string' && rawUrl.startsWith('blob:');
         return { ...m, renderUrl: missing ? '' : rawUrl, missing };
-    });
+    }));
 
     const content = document.getElementById('modal-details-content');
     const printEl = document.getElementById('printable-ticket');
