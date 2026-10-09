@@ -570,7 +570,7 @@ async function syncPendingMidias() {
 
         const safeName = sanitizeStorageFileName(m.nome);
         const ext = safeName.includes('.') ? safeName.split('.').pop() : null;
-        const contentType = m.mime_type || m.blob?.type || (m.tipo === 'VIDEO' ? 'video/webm' : 'image/jpeg');
+        const contentType = String(m.mime_type || m.blob?.type || (m.tipo === 'VIDEO' ? 'video/webm' : 'image/jpeg')).split(';')[0].trim().toLowerCase();
         const fallbackExt = contentType.startsWith('image/') ? (contentType.split('/')[1] || 'jpg') : (contentType.startsWith('video/') ? (contentType.split('/')[1] || 'webm') : 'bin');
         const fileName = ext ? safeName : `${safeName}.${fallbackExt}`;
         const path = `${proc.cloud_id}/${m.id}-${fileName}`;

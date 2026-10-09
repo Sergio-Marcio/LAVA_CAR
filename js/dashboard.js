@@ -181,7 +181,7 @@ async function viewDetails(id) {
 
     const midias = await db.getAllFromIndex('registros_midia', 'processo_id', id);
 
-    const midiasRender = (midias || []).map(m => {
+    const midiasRender = await Promise.all((midias || []).map(async m => {
         if (m && m.blob) {
             const u = URL.createObjectURL(m.blob);
             detailsTempObjectUrls.push(u);
@@ -189,8 +189,8 @@ async function viewDetails(id) {
         }
 
         if (m?.caminho_arquivo && typeof sbClient !== 'undefined' && sbClient?.storage?.from) {
-            const { data } = sbClient.storage.from('midias').getPublicUrl(m.caminho_arquivo);
-            const url = data?.publicUrl || '';
+            const { data } = await sbClient.storage.from('midias').createSignedUrl(m.caminho_arquivo, 3600);
+            const url = data?.signedUrl || '';
             return { ...m, renderUrl: url, missing: !url };
         }
 

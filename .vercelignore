@@ -5,3 +5,15 @@ dist
 .trae
 .log
 .figma
+# Arquivos internos: nao devem ser publicados (schema, migrations, docs, testes, cache da CLI)
+supabase
+bd.sql
+projeto.md
+deploy.txt
+tests
+coverage
+package.json
+package-lock.json
+vitest.config.js
+netlify.toml
+.gitignore
