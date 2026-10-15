@@ -59,7 +59,11 @@ function switchTab(tab) {
     if (tab === 'clients') loadClientsData();
     if (tab === 'new') {
         loadLavadoresDropdown();
+        if (typeof loadVeiculosCadastradosDropdown === 'function') loadVeiculosCadastradosDropdown();
         if (currentStep === 1) renderServicesSelectorsInWizard();
+        if (typeof veiculoPreSelecionado !== 'undefined' && veiculoPreSelecionado && typeof aplicarVeiculoPreSelecionadoNaOrdem === 'function') {
+            aplicarVeiculoPreSelecionadoNaOrdem(veiculoPreSelecionado);
+        }
     }
     if (tab === 'settings') {
         loadTeam();

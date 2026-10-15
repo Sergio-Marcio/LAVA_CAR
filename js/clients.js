@@ -190,15 +190,18 @@ function renderClientsHtml(list) {
 
         const vehiclesHtml = (c.vehicles && c.vehicles.length > 0)
             ? c.vehicles.map(v => `
-                <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700">
+                <button type="button" onclick="onAbrirOrdem(${v.id ? Number(v.id) : `'${escapeHtml(toUpper(v.placa))}'`}, ${c.id})" title="Abrir ordem com recomendação para ${escapeHtml(toUpper(v.placa))}" class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-brand-50 dark:bg-slate-800 dark:hover:bg-brand-950/60 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 hover:border-brand-400 transition">
                     <i data-lucide="car" class="w-3 h-3 text-brand-500"></i>
                     <strong class="font-mono text-brand-600 dark:text-brand-400">${escapeHtml(toUpper(v.placa))}</strong>
                     ${v.modelo ? `<span class="text-slate-400 text-[10px]">(${escapeHtml(toUpper(v.modelo))})</span>` : ''}
-                </span>
+                </button>
             `).join('')
             : `<span class="text-[11px] text-slate-400 italic">Nenhum veículo vinculado</span>`;
 
-        const firstVehiclePlate = (c.vehicles && c.vehicles.length > 0) ? c.vehicles[0].placa : '';
+        const firstVehicle = (c.vehicles && c.vehicles.length > 0) ? c.vehicles[0] : null;
+        const firstArg = firstVehicle
+            ? (firstVehicle.id ? Number(firstVehicle.id) : `'${escapeHtml(toUpper(firstVehicle.placa))}'`)
+            : 'null';
 
         return `
         <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-brand-500/40 transition flex flex-col justify-between gap-4">
@@ -243,8 +246,8 @@ function renderClientsHtml(list) {
 
             <!-- Ações Rápidas -->
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                <button type="button" onclick="quickStartRdpForClient(${c.id})" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-500 flex items-center gap-1 transition">
-                    <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Nova RDP
+                <button type="button" onclick="onAbrirOrdem(${firstArg}, ${c.id})" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-500 flex items-center gap-1 transition">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Abrir ordem com recomendação
                 </button>
                 <button type="button" onclick="deleteClient(${c.id})" title="Excluir Cliente" class="text-slate-400 hover:text-rose-500 text-xs p-1 rounded-lg transition">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -286,6 +289,11 @@ function openModalClient() {
     document.getElementById('client-telefone').value = '';
     document.getElementById('client-placa').value = '';
     document.getElementById('client-modelo').value = '';
+    const savedBox = document.getElementById('client-saved-actions');
+    if (savedBox) {
+        savedBox.innerHTML = '';
+        savedBox.classList.add('hidden');
+    }
     modal.classList.remove('hidden');
     setTimeout(() => {
         const inp = document.getElementById('client-nome');
@@ -302,7 +310,8 @@ function closeModalClient() {
 async function saveClient() {
     const nome = toUpper(document.getElementById('client-nome').value.trim());
     const tel = document.getElementById('client-telefone').value.trim();
-    const placa = (document.getElementById('client-placa').value || '').trim().toUpperCase();
+    const rawPlaca = (document.getElementById('client-placa').value || '').trim().toUpperCase();
+    const placa = typeof normalizarPlaca === 'function' ? normalizarPlaca(rawPlaca) : rawPlaca.replace(/[^A-Z0-9]/g, '');
     const modelo = toUpper(document.getElementById('client-modelo').value.trim());
 
     if (!nome) {
@@ -334,7 +343,8 @@ async function saveClient() {
             });
         }
 
-        // Se informou placa, cadastra o veículo vinculado
+        // Se informou placa, cadastra ou atualiza o veículo vinculado
+        let veiculoId = null;
         if (placa) {
             let foundV = null;
             try {
@@ -342,19 +352,50 @@ async function saveClient() {
             } catch (_) {}
 
             if (!foundV) {
-                await vStore.add({
+                veiculoId = await vStore.add({
                     placa: placa,
                     modelo: modelo || 'GERAL',
                     cliente_id: clienteId,
                     criado_em: new Date().toISOString()
                 });
+            } else {
+                veiculoId = foundV.id;
+                await vStore.put({
+                    ...foundV,
+                    modelo: modelo || foundV.modelo || 'GERAL',
+                    cliente_id: clienteId || foundV.cliente_id
+                });
             }
         }
 
         await tx.done;
-        closeModalClient();
         showToast(`Cliente "${nome}" salvo com sucesso!`, 'success');
         await loadClientsData();
+
+        const argVeiculo = veiculoId != null ? Number(veiculoId) : (placa ? `'${escapeHtml(placa)}'` : 'null');
+        const savedBox = document.getElementById('client-saved-actions');
+        if (savedBox && (veiculoId != null || placa)) {
+            savedBox.classList.remove('hidden');
+            savedBox.innerHTML = `
+                <div class="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 space-y-2.5">
+                    <p class="text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+                        Veículo ${escapeHtml(placa)} salvo para ${escapeHtml(nome)}!
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" id="btn-abrir-ordem-recomendacao" onclick="onAbrirOrdem(${argVeiculo}, ${clienteId})" class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> Abrir ordem com recomendação
+                        </button>
+                        <button type="button" onclick="closeModalClient()" class="px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            `;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        } else {
+            closeModalClient();
+        }
     } catch (e) {
         console.error('Erro ao salvar cliente:', e);
         showToast('Erro ao salvar cliente: ' + (e.message || String(e)), 'error');
@@ -382,35 +423,79 @@ async function deleteClient(id, nome) {
     }
 }
 
-function quickStartRdpForClient(arg1, arg2, arg3) {
-    let nome = '';
-    let placa = '';
-    let tel = '';
+async function onAbrirOrdem(veiculoIdOuPlaca, clienteId) {
+    closeModalClient();
 
-    if (typeof arg1 === 'number' || (typeof arg1 === 'string' && /^\d+$/.test(arg1))) {
-        const clientObj = (cachedClientsList || []).find(c => c.id === Number(arg1));
-        if (clientObj) {
-            nome = clientObj.nome || '';
-            tel = clientObj.telefone || '';
-            placa = (clientObj.vehicles && clientObj.vehicles.length > 0) ? clientObj.vehicles[0].placa : '';
-        }
-    } else {
-        nome = arg1 || '';
-        placa = arg2 || '';
-        tel = arg3 || '';
+    let veiculoObj = null;
+    let clienteObj = null;
+
+    if (typeof db !== 'undefined' && db) {
+        try {
+            const [veiculos, clientes] = await Promise.all([
+                db.getAll('veiculos').catch(() => []),
+                db.getAll('clientes').catch(() => [])
+            ]);
+
+            if (typeof veiculoIdOuPlaca === 'number') {
+                veiculoObj = veiculos.find(v => Number(v.id) === Number(veiculoIdOuPlaca)) || null;
+            } else if (typeof veiculoIdOuPlaca === 'string' && veiculoIdOuPlaca.trim()) {
+                const alvo = veiculoIdOuPlaca.trim().toUpperCase();
+                veiculoObj = veiculos.find(v => (typeof mesmaPlaca === 'function' ? mesmaPlaca(v.placa, alvo) : v.placa === alvo))
+                    || { id: null, placa: alvo, modelo: '', cliente_id: clienteId || null };
+            }
+
+            const cid = clienteId || veiculoObj?.cliente_id;
+            if (cid != null) {
+                clienteObj = clientes.find(c => Number(c.id) === Number(cid)) || null;
+            }
+        } catch (_) {}
     }
 
+    if (!clienteObj && clienteId != null) {
+        clienteObj = (cachedClientsList || []).find(c => Number(c.id) === Number(clienteId)) || null;
+    }
+    if (!veiculoObj && clienteObj && Array.isArray(clienteObj.vehicles) && clienteObj.vehicles.length > 0) {
+        veiculoObj = clienteObj.vehicles[0];
+    }
+
+    veiculoPreSelecionado = {
+        id: veiculoObj?.id ?? null,
+        placa: veiculoObj?.placa || (typeof veiculoIdOuPlaca === 'string' ? veiculoIdOuPlaca : ''),
+        modelo: veiculoObj?.modelo || '',
+        cor: veiculoObj?.cor || '',
+        ano: veiculoObj?.ano || '',
+        vin: veiculoObj?.vin || '',
+        cliente_id: clienteObj?.id ?? clienteId ?? null,
+        cliente_nome: clienteObj?.nome || '',
+        telefone: clienteObj?.telefone || ''
+    };
+
     switchTab('new');
-    setTimeout(() => {
-        const inpCliente = document.getElementById('inp-cliente');
-        const inpPlaca = document.getElementById('inp-placa');
-        const inpTel = document.getElementById('inp-telefone');
-        if (inpCliente) inpCliente.value = nome || '';
-        if (inpPlaca && placa) inpPlaca.value = placa || '';
-        if (inpTel && tel) inpTel.value = tel || '';
-        if (inpPlaca && placa && typeof onPlacaInput === 'function') onPlacaInput({ target: inpPlaca });
-        showToast(`Dados de ${nome} preenchidos na Nova RDP!`, 'info');
-    }, 150);
+    if (typeof setStep === 'function') setStep(1);
+    if (typeof aplicarVeiculoPreSelecionadoNaOrdem === 'function') {
+        await aplicarVeiculoPreSelecionadoNaOrdem(veiculoPreSelecionado);
+    }
+}
+
+function quickStartRdpForClient(arg1, arg2, arg3) {
+    if (typeof arg1 === 'number' || (typeof arg1 === 'string' && /^\d+$/.test(arg1))) {
+        const clientObj = (cachedClientsList || []).find(c => c.id === Number(arg1));
+        const firstVeh = clientObj?.vehicles?.[0];
+        return onAbrirOrdem(firstVeh?.id ?? firstVeh?.placa ?? null, Number(arg1));
+    }
+    veiculoPreSelecionado = {
+        id: null,
+        placa: arg2 || '',
+        modelo: '',
+        cliente_id: null,
+        cliente_nome: arg1 || '',
+        telefone: arg3 || ''
+    };
+    switchTab('new');
+    if (typeof setStep === 'function') setStep(1);
+    if (typeof aplicarVeiculoPreSelecionadoNaOrdem === 'function') {
+        aplicarVeiculoPreSelecionadoNaOrdem(veiculoPreSelecionado);
+    }
 }
 
 async function loadSeedData() {

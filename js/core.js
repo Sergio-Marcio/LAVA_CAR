@@ -9,6 +9,8 @@ let currentStep = 1;
 // Selection State for New RDP
 let selectedWashId = null;
 let selectedExtraIds = new Set();
+let origemIA = new Set();
+let veiculoPreSelecionado = null;
 
 // Selection State for Services Simulator
 let simSelectedWashId = null;
@@ -89,5 +91,6 @@ function escapeHtml(value) {
 
 if (typeof window !== 'undefined') {
     window.escapeHtml = escapeHtml;
+    window.origemIA = origemIA;
 }
 

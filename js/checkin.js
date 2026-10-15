@@ -234,7 +234,14 @@ async function saveInspectionRDP() {
 
 function resetRdpForm() {
     document.getElementById('rdp-form').reset();
-    ['placa-status', 'placa-historico'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+    ['placa-status', 'placa-historico', 'ia-recomendacao-step1', 'ia-recomendacao-step2'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+    });
+    ['btn-atualizar-recomendacao', 'btn-atualizar-recomendacao-step2'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.add('hidden');
+    });
     for (const m of currentInspectionMedia) {
         if (m && typeof m.url === 'string' && m.url.startsWith('blob:')) {
             try { URL.revokeObjectURL(m.url); } catch (_) {}
@@ -246,6 +253,11 @@ function resetRdpForm() {
     clearSignature();
     selectedWashId = null;
     selectedExtraIds.clear();
+    if (typeof origemIA !== 'undefined' && origemIA instanceof Set) origemIA.clear();
+    if (typeof ultimaRecomendacaoIA !== 'undefined') ultimaRecomendacaoIA = null;
+    if (typeof estadoRecomendacaoIA !== 'undefined') {
+        estadoRecomendacaoIA = { carregando: false, erro: null, aviso: null, placaAlvo: '', necessidadesUsadas: '', historicoExtraUsado: '' };
+    }
     renderMediaGallery();
     stopCamera();
     setStep(1);

@@ -83,6 +83,134 @@ async function onPlacaInput(ev) {
     if (hist.length) await preencherClienteDaPlaca(resumo);
     if (box) box.innerHTML = renderHistoricoPlaca(hist, resumo);
     if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    if (typeof dispararRecomendacaoAutomatica === 'function') {
+        await dispararRecomendacaoAutomatica({ forcar: false });
+    }
+}
+
+async function loadVeiculosCadastradosDropdown(placaSelecionada = '') {
+    const sel = document.getElementById('inp-veiculo-select');
+    if (!sel || typeof db === 'undefined' || !db) return;
+
+    try {
+        const [veiculos, clientes, processos] = await Promise.all([
+            db.getAll('veiculos').catch(() => []),
+            db.getAll('clientes').catch(() => []),
+            db.getAll('processos').catch(() => [])
+        ]);
+
+        const clientePorId = new Map();
+        (clientes || []).forEach(c => clientePorId.set(Number(c.id), c));
+
+        const opcoesMap = new Map();
+        (veiculos || []).forEach(v => {
+            const p = normalizarPlaca(v.placa);
+            if (!p) return;
+            const cli = clientePorId.get(Number(v.cliente_id));
+            opcoesMap.set(chavePlaca(p), {
+                id: v.id,
+                placa: p,
+                modelo: v.modelo || '',
+                cliente_nome: cli?.nome || '',
+                telefone: cli?.telefone || ''
+            });
+        });
+
+        (processos || []).forEach(proc => {
+            const p = normalizarPlaca(proc.placa);
+            if (!p || opcoesMap.has(chavePlaca(p))) return;
+            opcoesMap.set(chavePlaca(p), {
+                id: proc.veiculo_id || null,
+                placa: p,
+                modelo: proc.modelo || '',
+                cliente_nome: proc.cliente_nome || '',
+                telefone: ''
+            });
+        });
+
+        const lista = Array.from(opcoesMap.values()).sort((a, b) => a.placa.localeCompare(b.placa));
+        const normSel = normalizarPlaca(placaSelecionada || document.getElementById('inp-placa')?.value || '');
+
+        sel.innerHTML = `<option value="">Escolher veículo cadastrado (ou digite a placa abaixo)...</option>` +
+            lista.map(item => {
+                const isSelected = normSel && mesmaPlaca(item.placa, normSel);
+                const label = `${formatarPlaca(item.placa)}${item.modelo ? ` • ${toUpper(item.modelo)}` : ''}${item.cliente_nome ? ` — ${toUpper(item.cliente_nome)}` : ''}`;
+                return `<option value="${escapeHtml(item.placa)}" data-veiculo-id="${item.id ?? ''}" ${isSelected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            }).join('');
+    } catch (_) {}
+}
+
+async function onSelectVeiculoCadastrado(ev) {
+    const placa = normalizarPlaca(ev?.target?.value || '');
+    if (!placa) return;
+
+    const inpPlaca = document.getElementById('inp-placa');
+    const inpCliente = document.getElementById('inp-cliente');
+    const inpModelo = document.getElementById('inp-modelo');
+    const inpTel = document.getElementById('inp-telefone');
+
+    if (inpCliente) inpCliente.value = '';
+    if (inpModelo) inpModelo.value = '';
+    if (inpTel) inpTel.value = '';
+
+    if (typeof db !== 'undefined' && db) {
+        try {
+            const [veiculos, clientes] = await Promise.all([
+                db.getAll('veiculos').catch(() => []),
+                db.getAll('clientes').catch(() => [])
+            ]);
+            const v = (veiculos || []).find(x => mesmaPlaca(x.placa, placa));
+            if (v) {
+                if (inpModelo && v.modelo) inpModelo.value = toUpper(v.modelo);
+                const cli = (clientes || []).find(c => Number(c.id) === Number(v.cliente_id));
+                if (cli) {
+                    if (inpCliente && cli.nome) inpCliente.value = toUpper(cli.nome);
+                    if (inpTel && cli.telefone) inpTel.value = cli.telefone;
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (inpPlaca) {
+        inpPlaca.value = placa;
+        await onPlacaInput({ target: inpPlaca });
+    }
+}
+
+async function aplicarVeiculoPreSelecionadoNaOrdem(veiculoInicial) {
+    const alvo = veiculoInicial || (typeof veiculoPreSelecionado !== 'undefined' ? veiculoPreSelecionado : null);
+    if (!alvo) return;
+
+    const inpPlaca = document.getElementById('inp-placa');
+    const inpCliente = document.getElementById('inp-cliente');
+    const inpModelo = document.getElementById('inp-modelo');
+    const inpTel = document.getElementById('inp-telefone');
+    const inpCor = document.getElementById('inp-cor');
+    const inpAno = document.getElementById('inp-ano');
+    const inpVin = document.getElementById('inp-vin');
+
+    const placaNorm = normalizarPlaca(alvo.placa || '');
+    if (inpCliente) inpCliente.value = toUpper(alvo.cliente_nome || '');
+    if (inpModelo) inpModelo.value = toUpper(alvo.modelo || '');
+    if (inpTel) inpTel.value = alvo.telefone || '';
+    if (inpCor && alvo.cor) inpCor.value = toUpper(alvo.cor);
+    if (inpAno && alvo.ano) inpAno.value = alvo.ano;
+    if (inpVin && alvo.vin) inpVin.value = toUpper(alvo.vin);
+
+    await loadVeiculosCadastradosDropdown(placaNorm);
+
+    if (inpPlaca && placaNorm) {
+        inpPlaca.value = placaNorm;
+        await onPlacaInput({ target: inpPlaca });
+    }
+
+    if (alvo.cliente_nome || placaNorm) {
+        showToast(`Veículo ${placaNorm || ''} de ${toUpper(alvo.cliente_nome || 'Cliente')} selecionado com recomendação!`, 'info');
+    }
+    if (typeof veiculoPreSelecionado !== 'undefined') {
+        veiculoPreSelecionado = null;
+    }
 }
 
 async function preencherClienteDaPlaca(resumo) {
@@ -115,16 +243,25 @@ function renderHistoricoPlaca(hist, resumo) {
         <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 text-xs font-bold text-amber-800 dark:text-amber-200 flex items-center gap-2">
             <i data-lucide="alert-triangle" class="w-4 h-4"></i> Este veículo já está no pátio (entrada em ${new Date(resumo.emAndamento.data_entrada).toLocaleString('pt-BR')}).
         </div>` : '';
-    const linhas = hist.slice(0, 5).map(p => `
-        <li class="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-            <span>${new Date(p.data_entrada).toLocaleDateString('pt-BR')} • ${escapeHtml(p.lavagem?.nome || 'Serviço')}${(p.servicos_adicionais || []).length ? ` +${p.servicos_adicionais.length}` : ''}</span>
-            <span class="font-mono font-bold ${p.status === 'CANCELADO' ? 'text-rose-500 line-through' : p.status === 'EM_ANDAMENTO' ? 'text-amber-600' : 'text-emerald-600'}">R$ ${Number(p.valor_total || 0).toFixed(2)}</span>
-        </li>`).join('');
+
+    const todosConcluidos = hist.filter(p => p.status === 'CONCLUIDO');
+    const concluidos = todosConcluidos.slice(0, 10);
+    const listaExibicao = concluidos.length > 0 ? concluidos : hist.slice(0, 10);
+
+    const linhas = listaExibicao.map(p => {
+        const nomesExtras = (p.servicos_adicionais || []).map(a => escapeHtml(a.nome || '')).filter(Boolean);
+        const extrasTexto = nomesExtras.length ? ` + ${nomesExtras.join(', ')}` : '';
+        return `
+        <li class="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <span>${new Date(p.data_entrada).toLocaleDateString('pt-BR')} • <strong>${escapeHtml(p.lavagem?.nome || 'Serviço')}</strong>${extrasTexto}</span>
+            <span class="font-mono font-bold whitespace-nowrap ${p.status === 'CANCELADO' ? 'text-rose-500 line-through' : p.status === 'EM_ANDAMENTO' ? 'text-amber-600' : 'text-emerald-600'}">R$ ${Number(p.valor_total || 0).toFixed(2)}</span>
+        </li>`;
+    }).join('');
     return `
         ${alerta}
         <div class="p-3 rounded-xl bg-brand-50 dark:bg-brand-950/40 border border-brand-100 dark:border-brand-900 space-y-2">
             <div class="flex items-center justify-between text-xs">
-                <span class="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1"><i data-lucide="history" class="w-4 h-4"></i> ${resumo.visitas} visita(s)</span>
+                <span class="font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1"><i data-lucide="history" class="w-4 h-4"></i> ${resumo.visitas} visita(s) (${todosConcluidos.length} concluída(s), exibindo até 10)</span>
                 <span class="text-slate-500">Total gasto: <strong class="font-mono text-emerald-600">R$ ${resumo.totalGasto.toFixed(2)}</strong></span>
             </div>
             <ul class="text-[11px] text-slate-600 dark:text-slate-300">${linhas}</ul>

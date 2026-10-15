@@ -22,8 +22,14 @@ function setStep(step) {
     document.getElementById('btn-next').classList.toggle('hidden', step === 5);
     document.getElementById('btn-save').classList.toggle('hidden', step !== 5);
 
-    if (step === 1) loadLavadoresDropdown();
-    if (step === 2) renderServicesSelectorsInWizard();
+    if (step === 1) {
+        loadLavadoresDropdown();
+        if (typeof loadVeiculosCadastradosDropdown === 'function') loadVeiculosCadastradosDropdown();
+    }
+    if (step === 2) {
+        renderServicesSelectorsInWizard();
+        if (typeof renderPainelRecomendacaoIA === 'function') renderPainelRecomendacaoIA();
+    }
     if (step === 3) {
         renderChecklist();
         setTimeout(drawCarDiagram, 100);
@@ -57,10 +63,11 @@ function prevStep() {
 }
 
 // --- RENDER WIZARD SERVICES SELECTORS ---
-async function renderServicesSelectorsInWizard() {
-    const allServices = await db.getAll('servicos');
+async function renderServicesSelectorsInWizard(prefetchedServices) {
+    const allServices = Array.isArray(prefetchedServices) ? prefetchedServices : await db.getAll('servicos');
     const washGrid = document.getElementById('wash-types-grid');
     const extraGrid = document.getElementById('extra-services-grid');
+    if (!washGrid || !extraGrid) return;
 
     const washTypes = allServices.filter(s => s.categoria === 'LAVAGEM');
     const extraServices = allServices.filter(s => s.categoria === 'OUTRO');
@@ -72,16 +79,21 @@ async function renderServicesSelectorsInWizard() {
 
     washGrid.innerHTML = washTypes.map(s => {
         const isSel = s.id === selectedWashId;
+        const isIA = typeof origemIA !== 'undefined' && origemIA instanceof Set && origemIA.has(Number(s.id));
         const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
         const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || '') : String(s.descricao || '');
+        const badgeIA = isIA
+            ? `<span data-badge-ia="${s.id}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-brand-600 text-white shadow-sm">IA</span>`
+            : '';
         return `
         <div onclick="selectWashType(${s.id})" class="p-4 rounded-xl border-2 cursor-pointer transition flex items-center justify-between ${isSel ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/40 shadow-sm' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="w-4 h-4 rounded-full border border-brand-500 flex items-center justify-center ${isSel ? 'bg-brand-500' : ''}">
                         ${isSel ? '<span class="w-1.5 h-1.5 rounded-full bg-white"></span>' : ''}
                     </span>
                     <h5 class="font-bold text-slate-900 dark:text-white text-sm">${nomeSafe}</h5>
+                    ${badgeIA}
                 </div>
                 <p class="text-xs text-slate-500 mt-1">${descSafe}</p>
             </div>
@@ -91,14 +103,21 @@ async function renderServicesSelectorsInWizard() {
 
     extraGrid.innerHTML = extraServices.map(s => {
         const isSel = selectedExtraIds.has(s.id);
+        const isIA = typeof origemIA !== 'undefined' && origemIA instanceof Set && origemIA.has(Number(s.id));
         const nomeSafe = typeof escapeHtml === 'function' ? escapeHtml(s.nome) : String(s.nome || '');
         const descSafe = typeof escapeHtml === 'function' ? escapeHtml(s.descricao || '') : String(s.descricao || '');
+        const badgeIA = isIA
+            ? `<span data-badge-ia="${s.id}" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-brand-600 text-white shadow-sm">IA</span>`
+            : '';
         return `
         <div onclick="toggleExtraService(${s.id})" class="p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${isSel ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50'}">
             <div class="flex items-center gap-2">
                 <input type="checkbox" ${isSel ? 'checked' : ''} class="w-4 h-4 text-emerald-600 rounded">
                 <div>
-                    <h5 class="font-bold text-slate-900 dark:text-white text-xs">${nomeSafe}</h5>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <h5 class="font-bold text-slate-900 dark:text-white text-xs">${nomeSafe}</h5>
+                        ${badgeIA}
+                    </div>
                     <p class="text-[10px] text-slate-500">${descSafe}</p>
                 </div>
             </div>
@@ -106,7 +125,7 @@ async function renderServicesSelectorsInWizard() {
         </div>`;
     }).join('');
 
-    updateFinancialCalculations(allServices);
+    await updateFinancialCalculations(allServices);
 }
 
 function selectWashType(id) {

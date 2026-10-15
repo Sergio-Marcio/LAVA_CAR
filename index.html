@@ -298,6 +298,12 @@
                         <i data-lucide="user-check" class="w-4 h-4 text-brand-500"></i> Dados Básicos de Entrada
                     </h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Escolher Veículo Cadastrado (Opcional)</label>
+                            <select id="inp-veiculo-select" onchange="onSelectVeiculoCadastrado(event)" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none">
+                                <option value="">Escolher veículo cadastrado (ou digite a placa abaixo)...</option>
+                            </select>
+                        </div>
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Placa do Veículo *</label>
                             <input type="text" id="inp-placa" required maxlength="8" autocomplete="off" oninput="onPlacaInput(event)" placeholder="Ex: ABC1D23 ou ABC1234" class="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-mono font-bold uppercase tracking-wider focus:ring-2 focus:ring-brand-500 outline-none">
@@ -337,11 +343,30 @@
                             <p class="text-[10px] text-slate-400 mt-1">A comissão (taxa por carro e/ou % do serviço) é apurada automaticamente no relatório.</p>
                         </div>
                         <div id="placa-historico" class="md:col-span-2 space-y-2"></div>
+                        <div class="md:col-span-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <label for="inp-necessidades" class="text-xs font-bold uppercase text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-500"></i> Necessidades do Cliente / Observações para Recomendação (Opcional)
+                                </label>
+                                <button type="button" id="btn-atualizar-recomendacao" onclick="atualizarRecomendacaoManual()" class="hidden px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition">
+                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Atualizar recomendação
+                                </button>
+                            </div>
+                            <input type="text" id="inp-necessidades" oninput="aoAlterarNecessidadesOuHistorico()" placeholder="Ex: voltou de estrada de terra, pelo de cachorro no banco, quer brilho extra..." class="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none">
+                            <input type="text" id="inp-historico-extra" oninput="aoAlterarNecessidadesOuHistorico()" placeholder="Mais histórico relevante (opcional): ex. nunca cristalizou vidros, fez polimento há 6 meses..." class="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div id="ia-recomendacao-step1" class="md:col-span-2"></div>
                     </div>
                 </div>
 
                 <!-- PASSO 2: SELEÇÃO DE TIPOS DE LAVAGEM & OUTROS SERVIÇOS E PREÇOS -->
                 <div id="step-2-content" class="hidden space-y-6">
+                    <div id="ia-recomendacao-step2"></div>
+                    <div class="flex justify-end">
+                        <button type="button" id="btn-atualizar-recomendacao-step2" onclick="atualizarRecomendacaoManual()" class="hidden px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Atualizar recomendação
+                        </button>
+                    </div>
                     <!-- Tipos de Lavagem Selector -->
                     <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
                         <div class="flex items-center justify-between">
@@ -1227,6 +1252,8 @@
                     </div>
                 </div>
 
+                <div id="client-saved-actions" class="hidden"></div>
+
                 <div class="pt-3 border-t flex justify-end gap-2">
                     <button type="button" onclick="closeModalClient()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 font-bold text-xs rounded-xl">Cancelar</button>
                     <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow">Salvar Cliente</button>
@@ -1402,6 +1429,7 @@
     <script src="js/db.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/placa.js"></script>
+    <script src="js/recomendacao.js"></script>
     <script src="js/wizard.js"></script>
     <script src="js/media.js"></script>
     <script src="js/inspection.js"></script>
