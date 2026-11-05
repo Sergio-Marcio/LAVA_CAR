@@ -10,7 +10,7 @@ describe('Unit: placa (antiga / Mercosul), equivalência e histórico', () => {
   let k;
   beforeEach(() => {
     requireInJsdom(CORE_PATH, `globalThis.escapeHtml = escapeHtml; globalThis.toUpper = toUpper; globalThis.showToast = showToast;`);
-    requireInJsdom(PLACA_PATH, `window.__p = { normalizarPlaca, tipoPlaca, formatarPlaca, chavePlaca, mesmaPlaca, historicoDaPlaca, resumoHistoricoPlaca, onPlacaInput };`);
+    requireInJsdom(PLACA_PATH, `window.__p = { normalizarPlaca, tipoPlaca, formatarPlaca, chavePlaca, mesmaPlaca, historicoDaPlaca, resumoHistoricoPlaca, onPlacaInput, onSelectVeiculoCadastrado, atualizarHistoricoPlacaAtual };`);
     k = window.__p;
   });
 
@@ -73,6 +73,72 @@ describe('Unit: placa (antiga / Mercosul), equivalência e histórico', () => {
     expect(document.getElementById('inp-modelo').value).toBe('JÁ DIGITADO');
     expect(document.getElementById('inp-telefone').value).toBe('(11) 90000-0000');
     expect(document.getElementById('placa-historico').textContent).toMatch(/1 visita/);
+    delete window.db;
+  });
+  const FORM_VEICULO = `
+    <input id="inp-placa"><p id="placa-status"></p>
+    <input id="inp-cliente"><input id="inp-modelo"><input id="inp-telefone">
+    <input id="inp-cor"><input id="inp-ano"><input id="inp-vin">
+    <div id="placa-historico"></div><div id="toast" class="hidden"><span id="toast-msg"></span></div>`;
+
+  it('trocar o veículo cadastrado não mantém cor/ano/chassi do veículo anterior', async () => {
+    document.body.innerHTML = FORM_VEICULO;
+    window.db = {
+      getAll: async (store) => {
+        if (store === 'veiculos') return [
+          { id: 1, placa: 'TST1A23', modelo: 'gol', cor: 'azul', ano: 2020, cliente_id: 1 },
+          { id: 2, placa: 'FIN1A23', modelo: 'onix', cliente_id: 2 }
+        ];
+        if (store === 'clientes') return [{ id: 1, nome: 'ana' }, { id: 2, nome: 'bia' }];
+        return [];
+      }
+    };
+    await k.onSelectVeiculoCadastrado({ target: { value: 'TST1A23' } });
+    expect(document.getElementById('inp-cor').value).toBe('AZUL');
+    expect(document.getElementById('inp-ano').value).toBe('2020');
+
+    await k.onSelectVeiculoCadastrado({ target: { value: 'FIN1A23' } });
+    expect(document.getElementById('inp-placa').value).toBe('FIN1A23');
+    expect(document.getElementById('inp-cliente').value).toBe('BIA');
+    expect(document.getElementById('inp-modelo').value).toBe('ONIX');
+    expect(document.getElementById('inp-cor').value).toBe('');
+    expect(document.getElementById('inp-ano').value).toBe('');
+    delete window.db;
+  });
+
+  it('digitar outra placa limpa só os campos autopreenchidos pela placa anterior', async () => {
+    document.body.innerHTML = FORM_VEICULO;
+    window.db = {
+      getAll: async (store) => store === 'clientes' ? [] : [
+        { id: 1, placa: 'TST1A23', cliente_nome: 'ANA', modelo: 'GOL', veiculo_cor: 'AZUL', veiculo_ano: 2020, status: 'CONCLUIDO', data_entrada: '2026-09-01T10:00:00Z' }
+      ]
+    };
+    const input = document.getElementById('inp-placa');
+    input.value = 'TST1A23';
+    await k.onPlacaInput({ target: input });
+    expect(document.getElementById('inp-cor').value).toBe('AZUL');
+
+    document.getElementById('inp-modelo').value = 'EDITADO À MÃO';
+    input.value = 'NEW1A23';
+    await k.onPlacaInput({ target: input });
+    expect(document.getElementById('inp-cliente').value).toBe('');
+    expect(document.getElementById('inp-cor').value).toBe('');
+    expect(document.getElementById('inp-ano').value).toBe('');
+    expect(document.getElementById('inp-modelo').value).toBe('EDITADO À MÃO');
+    delete window.db;
+  });
+
+  it('atualizarHistoricoPlacaAtual remove o aviso de pátio depois do checkout', async () => {
+    document.body.innerHTML = FORM_VEICULO;
+    const proc = { id: 1, placa: 'TST1A23', status: 'EM_ANDAMENTO', valor_total: 95, data_entrada: '2026-11-05T10:00:00Z' };
+    window.db = { getAll: async () => [proc] };
+    document.getElementById('inp-placa').value = 'TST1A23';
+    await k.atualizarHistoricoPlacaAtual();
+    expect(document.getElementById('placa-historico').textContent).toMatch(/já está no pátio/);
+
+    proc.status = 'CONCLUIDO';
+    await k.atualizarHistoricoPlacaAtual();
+    expect(document.getElementById('placa-historico').textContent).not.toMatch(/já está no pátio/);
     delete window.db;
   });
 });

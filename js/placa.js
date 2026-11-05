@@ -57,6 +57,33 @@ function resumoHistoricoPlaca(historico) {
 // ---------- UI do passo 1 do wizard ----------
 let placaLookupSeq = 0;
 
+// Campos preenchidos automaticamente para a placa atual; limpos quando outra placa é escolhida.
+let placaAutofill = { chave: '', valores: {} };
+
+function resetPlacaAutofill(chave = '', valores = {}) {
+    placaAutofill = { chave, valores: { ...valores } };
+}
+
+function limparAutofillDePlacaAnterior(chave) {
+    if (!placaAutofill.chave || placaAutofill.chave === chave) return;
+    Object.entries(placaAutofill.valores).forEach(([id, valor]) => {
+        const el = document.getElementById(id);
+        if (el && el.value === valor) el.value = '';
+    });
+    resetPlacaAutofill();
+}
+
+function preencherCamposVeiculo(placa, campos) {
+    const valores = {};
+    Object.entries(campos).forEach(([id, valor]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = valor == null ? '' : String(valor);
+        if (el.value) valores[id] = el.value;
+    });
+    resetPlacaAutofill(chavePlaca(placa), valores);
+}
+
 async function onPlacaInput(ev) {
     const input = ev?.target || document.getElementById('inp-placa');
     if (!input) return;
@@ -74,19 +101,36 @@ async function onPlacaInput(ev) {
     const box = document.getElementById('placa-historico');
     if (!tipo) { if (box) box.innerHTML = ''; return; }
 
+    limparAutofillDePlacaAnterior(chavePlaca(norm));
+
     const seq = ++placaLookupSeq;
     const all = await db.getAll('processos');
     if (seq !== placaLookupSeq) return;
     const hist = historicoDaPlaca(all, norm);
     const resumo = resumoHistoricoPlaca(hist);
 
-    if (hist.length) await preencherClienteDaPlaca(resumo);
+    if (hist.length) await preencherClienteDaPlaca(resumo, norm);
     if (box) box.innerHTML = renderHistoricoPlaca(hist, resumo);
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
     if (typeof dispararRecomendacaoAutomatica === 'function') {
         await dispararRecomendacaoAutomatica({ forcar: false });
     }
+}
+
+// Rerenderiza o histórico/alerta de pátio da placa já digitada (ex.: ao voltar para a Nova RDP).
+async function atualizarHistoricoPlacaAtual() {
+    const input = document.getElementById('inp-placa');
+    const box = document.getElementById('placa-historico');
+    if (!input || !box || typeof db === 'undefined' || !db) return;
+    const norm = normalizarPlaca(input.value);
+    if (!tipoPlaca(norm)) { box.innerHTML = ''; return; }
+    const seq = ++placaLookupSeq;
+    const all = await db.getAll('processos').catch(() => []);
+    if (seq !== placaLookupSeq) return;
+    const hist = historicoDaPlaca(all, norm);
+    box.innerHTML = renderHistoricoPlaca(hist, resumoHistoricoPlaca(hist));
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 async function loadVeiculosCadastradosDropdown(placaSelecionada = '') {
@@ -146,13 +190,7 @@ async function onSelectVeiculoCadastrado(ev) {
     if (!placa) return;
 
     const inpPlaca = document.getElementById('inp-placa');
-    const inpCliente = document.getElementById('inp-cliente');
-    const inpModelo = document.getElementById('inp-modelo');
-    const inpTel = document.getElementById('inp-telefone');
-
-    if (inpCliente) inpCliente.value = '';
-    if (inpModelo) inpModelo.value = '';
-    if (inpTel) inpTel.value = '';
+    const campos = { 'inp-cliente': '', 'inp-modelo': '', 'inp-telefone': '', 'inp-cor': '', 'inp-ano': '', 'inp-vin': '' };
 
     if (typeof db !== 'undefined' && db) {
         try {
@@ -162,15 +200,19 @@ async function onSelectVeiculoCadastrado(ev) {
             ]);
             const v = (veiculos || []).find(x => mesmaPlaca(x.placa, placa));
             if (v) {
-                if (inpModelo && v.modelo) inpModelo.value = toUpper(v.modelo);
+                campos['inp-modelo'] = toUpper(v.modelo);
+                campos['inp-cor'] = toUpper(v.cor);
+                campos['inp-ano'] = v.ano || '';
+                campos['inp-vin'] = toUpper(v.vin);
                 const cli = (clientes || []).find(c => Number(c.id) === Number(v.cliente_id));
                 if (cli) {
-                    if (inpCliente && cli.nome) inpCliente.value = toUpper(cli.nome);
-                    if (inpTel && cli.telefone) inpTel.value = cli.telefone;
+                    campos['inp-cliente'] = toUpper(cli.nome);
+                    campos['inp-telefone'] = cli.telefone || '';
                 }
             }
         } catch (_) {}
     }
+    preencherCamposVeiculo(placa, campos);
 
     if (inpPlaca) {
         inpPlaca.value = placa;
@@ -183,20 +225,16 @@ async function aplicarVeiculoPreSelecionadoNaOrdem(veiculoInicial) {
     if (!alvo) return;
 
     const inpPlaca = document.getElementById('inp-placa');
-    const inpCliente = document.getElementById('inp-cliente');
-    const inpModelo = document.getElementById('inp-modelo');
-    const inpTel = document.getElementById('inp-telefone');
-    const inpCor = document.getElementById('inp-cor');
-    const inpAno = document.getElementById('inp-ano');
-    const inpVin = document.getElementById('inp-vin');
 
     const placaNorm = normalizarPlaca(alvo.placa || '');
-    if (inpCliente) inpCliente.value = toUpper(alvo.cliente_nome || '');
-    if (inpModelo) inpModelo.value = toUpper(alvo.modelo || '');
-    if (inpTel) inpTel.value = alvo.telefone || '';
-    if (inpCor && alvo.cor) inpCor.value = toUpper(alvo.cor);
-    if (inpAno && alvo.ano) inpAno.value = alvo.ano;
-    if (inpVin && alvo.vin) inpVin.value = toUpper(alvo.vin);
+    preencherCamposVeiculo(placaNorm, {
+        'inp-cliente': toUpper(alvo.cliente_nome),
+        'inp-modelo': toUpper(alvo.modelo),
+        'inp-telefone': alvo.telefone || '',
+        'inp-cor': toUpper(alvo.cor),
+        'inp-ano': alvo.ano || '',
+        'inp-vin': toUpper(alvo.vin)
+    });
 
     await loadVeiculosCadastradosDropdown(placaNorm);
 
@@ -213,23 +251,31 @@ async function aplicarVeiculoPreSelecionadoNaOrdem(veiculoInicial) {
     }
 }
 
-async function preencherClienteDaPlaca(resumo) {
-    const inpCliente = document.getElementById('inp-cliente');
-    const inpModelo = document.getElementById('inp-modelo');
-    const inpTel = document.getElementById('inp-telefone');
-    let preencheu = false;
-    if (inpCliente && !inpCliente.value.trim() && resumo.cliente_nome) { inpCliente.value = toUpper(resumo.cliente_nome); preencheu = true; }
-    if (inpModelo && !inpModelo.value.trim() && resumo.modelo) { inpModelo.value = toUpper(resumo.modelo); preencheu = true; }
-    [['inp-cor', toUpper(resumo.veiculo_cor)], ['inp-ano', resumo.veiculo_ano], ['inp-vin', toUpper(resumo.veiculo_vin)]].forEach(([id, valor]) => {
+async function preencherClienteDaPlaca(resumo, placa = '') {
+    const chave = placa ? chavePlaca(placa) : '';
+    if (chave && placaAutofill.chave !== chave) resetPlacaAutofill(chave);
+    const preencher = (id, valor) => {
         const el = document.getElementById(id);
-        if (el && !el.value.trim() && valor) { el.value = valor; preencheu = true; }
-    });
+        if (!el || el.value.trim() || !valor) return false;
+        el.value = String(valor);
+        if (chave) placaAutofill.valores[id] = el.value;
+        return true;
+    };
+    let preencheu = false;
+    [
+        ['inp-cliente', toUpper(resumo.cliente_nome)],
+        ['inp-modelo', toUpper(resumo.modelo)],
+        ['inp-cor', toUpper(resumo.veiculo_cor)],
+        ['inp-ano', resumo.veiculo_ano],
+        ['inp-vin', toUpper(resumo.veiculo_vin)]
+    ].forEach(([id, valor]) => { if (preencher(id, valor)) preencheu = true; });
+    const inpTel = document.getElementById('inp-telefone');
     if (inpTel && !inpTel.value.trim()) {
         try {
             const clientes = await db.getAll('clientes');
             const c = clientes.find(c => (resumo.cliente_id != null && c.id === resumo.cliente_id))
                 || clientes.find(c => toUpper(c.nome) === toUpper(resumo.cliente_nome));
-            if (c?.telefone) { inpTel.value = c.telefone; preencheu = true; }
+            if (preencher('inp-telefone', c?.telefone)) preencheu = true;
         } catch (_) {}
     }
     if (preencheu) showToast('Cliente recorrente: dados preenchidos pela placa.', 'info');
