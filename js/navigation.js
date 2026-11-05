@@ -63,6 +63,8 @@ function switchTab(tab) {
         if (currentStep === 1) renderServicesSelectorsInWizard();
         if (typeof veiculoPreSelecionado !== 'undefined' && veiculoPreSelecionado && typeof aplicarVeiculoPreSelecionadoNaOrdem === 'function') {
             aplicarVeiculoPreSelecionadoNaOrdem(veiculoPreSelecionado);
+        } else if (typeof atualizarHistoricoPlacaAtual === 'function') {
+            atualizarHistoricoPlacaAtual();
         }
     }
     if (tab === 'settings') {

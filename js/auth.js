@@ -445,7 +445,7 @@ async function onLoggedIn(user) {
 
     hideLoginScreen();
     applyRoleUI(perfil ? perfil.nome : user.email);
-    showToast(`Bem-vindo, ${perfil?.nome || user.email} (${ROLE_LABELS[currentUserRole]})`, 'success');
+    showToast(`Bem-vindo, ${toUpper(perfil?.nome || user.email)} (${ROLE_LABELS[currentUserRole]})`, 'success');
     try { loadLavadoresDropdown(); } catch (_) {}
 }
 
@@ -495,7 +495,7 @@ function applyRoleUI(displayName) {
     // Badge do usuário no cabeçalho
     const badge = document.getElementById('user-badge');
     if (badge) {
-        badge.textContent = `${displayName} • ${ROLE_LABELS[currentUserRole]}`;
+        badge.textContent = `${toUpper(displayName)} • ${ROLE_LABELS[currentUserRole]}`;
         badge.classList.remove('hidden');
     }
 
@@ -529,7 +529,7 @@ async function loadTeam() {
 
     container.innerHTML = cachedEquipe.map(m => {
         const esc = typeof escapeHtml === 'function' ? escapeHtml : (v => String(v ?? ''));
-        const nomeSafe = esc(m.nome || '(sem nome)');
+        const nomeSafe = esc(m.nome ? toUpper(m.nome) : '(sem nome)');
         const emailSafe = esc(m.email || '');
         const idSafe = esc(m.id);
         const initialSafe = esc((m.nome || '?').charAt(0).toUpperCase());
@@ -758,9 +758,10 @@ function renderLavadoresSelect(select, list, currentVal) {
         list.map(l => {
             const displayName = l.nome || l.email || 'Lavador';
             const roleLabel = ROLE_LABELS[l.role] || l.role || 'Lavador';
-            const nameSafe = typeof escapeHtml === 'function' ? escapeHtml(displayName) : String(displayName);
-            const roleSafe = typeof escapeHtml === 'function' ? escapeHtml(roleLabel) : String(roleLabel);
-            return `<option value="${l.id}" data-taxa="${l.taxa_carro || 0}" data-pct="${l.comissao_pct || 0}">${nameSafe} (${roleSafe})</option>`;
+            const esc = typeof escapeHtml === 'function' ? escapeHtml : (v => String(v ?? ''));
+            const nameSafe = esc(toUpper(displayName));
+            const roleSafe = esc(roleLabel);
+            return `<option value="${l.id}" data-nome="${esc(displayName)}" data-taxa="${l.taxa_carro || 0}" data-pct="${l.comissao_pct || 0}">${nameSafe} (${roleSafe})</option>`;
         }).join('');
 
     if (currentVal) select.value = currentVal;

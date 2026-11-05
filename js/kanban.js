@@ -178,7 +178,7 @@ function renderKanbanCard(p, etapa, agora) {
     const servico = escapeHtml(p.lavagem?.nome || 'Sem lavagem');
     const extras = (p.servicos_adicionais || []).length;
     const atual = (p.etapas_historico || []).find(h => !h.fim);
-    const tecnico = escapeHtml(atual?.tecnico_nome || p.lavador_nome || '');
+    const tecnico = escapeHtml(toUpper(atual?.tecnico_nome || p.lavador_nome || ''));
     const tecnicos = tecnicosDoProcesso(p);
     const box = escapeHtml(p.box_nome || '');
     const restante = curaRestanteMs(p, agora);
@@ -220,7 +220,7 @@ function renderKanbanCard(p, etapa, agora) {
         <div class="flex flex-wrap gap-1 mt-2">
             ${box ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1"><i data-lucide="warehouse" class="w-3 h-3"></i>${box}</span>` : ''}
             ${tecnico ? `<span class="px-1.5 py-0.5 rounded bg-brand-50 dark:bg-brand-950 text-[10px] font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i>${tecnico}</span>` : ''}
-            ${tecnicos.length > 1 ? `<span title="${escapeHtml(tecnicos.join(', '))}" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3"></i>${tecnicos.length}</span>` : ''}
+            ${tecnicos.length > 1 ? `<span title="${escapeHtml(toUpper(tecnicos.join(', ')))}" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3"></i>${tecnicos.length}</span>` : ''}
             <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 flex items-center gap-1"><i data-lucide="hourglass" class="w-3 h-3"></i>${minutosNoPatio} min</span>
         </div>
         ${curaHtml}
@@ -290,7 +290,7 @@ async function openModalEtapa(id, etapaDestino) {
     }
     const selTec = document.getElementById('et-tecnico');
     selTec.innerHTML = '<option value="">Sem técnico atribuído</option>' + lavadores.map(l =>
-        `<option value="${escapeHtml(l.id)}" data-nome="${escapeHtml(l.nome)}" ${String(l.id) === String(tecnicoAtualId) ? 'selected' : ''}>${escapeHtml(l.nome)}</option>`).join('');
+        `<option value="${escapeHtml(l.id)}" data-nome="${escapeHtml(l.nome)}" ${String(l.id) === String(tecnicoAtualId) ? 'selected' : ''}>${escapeHtml(toUpper(l.nome))}</option>`).join('');
 
     const usaBox = etapaDestino === 'LAVAGEM' || etapaDestino === 'ESTETICA';
     document.getElementById('et-box-wrap').classList.toggle('hidden', !usaBox);
@@ -345,7 +345,7 @@ async function confirmarMovimentoEtapa() {
     if (curaMinutos > 0) solicitarPermissaoNotificacao();
     closeModalEtapa();
     const label = KANBAN_ETAPAS.find(e => e.id === etapaDestino)?.label || etapaDestino;
-    showToast(`${toUpper(proc.placa)} movido para ${label}${tecnico ? ` • ${tecnico.nome}` : ''}`, 'success');
+    showToast(`${toUpper(proc.placa)} movido para ${label}${tecnico ? ` • ${toUpper(tecnico.nome)}` : ''}`, 'success');
     loadDashboardData();
 }
 
@@ -370,7 +370,7 @@ async function openModalQa(id) {
 
     const rateio = rateioTecnicos(proc);
     document.getElementById('qa-rateio').innerHTML = rateio.length ? rateio.map(t =>
-        `<li class="flex justify-between"><span>${escapeHtml(t.tecnico_nome)} <span class="text-slate-400">(${t.etapas.join(', ')})</span></span><span class="font-mono font-bold">${t.minutos} min • ${t.percentual}%</span></li>`).join('')
+        `<li class="flex justify-between"><span>${escapeHtml(toUpper(t.tecnico_nome))} <span class="text-slate-400">(${t.etapas.join(', ')})</span></span><span class="font-mono font-bold">${t.minutos} min • ${t.percentual}%</span></li>`).join('')
         : '<li class="text-slate-400">Nenhum técnico registrado nas etapas.</li>';
 
     document.getElementById('qa-obs').value = proc.qa_checklist?.observacoes || '';

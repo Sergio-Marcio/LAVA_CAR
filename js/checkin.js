@@ -55,7 +55,8 @@ async function saveInspectionRDP() {
     // Lavador responsável e comissão
     const lavadorSelect = document.getElementById('inp-lavador');
     const lavadorId = lavadorSelect.value;
-    const lavadorNome = lavadorSelect.options[lavadorSelect.selectedIndex]?.text.split(' (')[0] || '';
+    const lavadorOpt = lavadorSelect.options[lavadorSelect.selectedIndex];
+    const lavadorNome = lavadorOpt?.dataset.nome || lavadorOpt?.text.split(' (')[0] || '';
     const taxaCarro = parseFloat(lavadorSelect.options[lavadorSelect.selectedIndex]?.dataset.taxa || 0);
     const comissaoPct = parseFloat(lavadorSelect.options[lavadorSelect.selectedIndex]?.dataset.pct || 0);
 
@@ -234,6 +235,7 @@ async function saveInspectionRDP() {
 
 function resetRdpForm() {
     document.getElementById('rdp-form').reset();
+    if (typeof resetPlacaAutofill === 'function') resetPlacaAutofill();
     ['placa-status', 'placa-historico', 'ia-recomendacao-step1', 'ia-recomendacao-step2'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';

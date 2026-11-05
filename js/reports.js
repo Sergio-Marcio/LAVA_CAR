@@ -183,7 +183,7 @@ async function loadCommissionsReport() {
                     ${escapeHtml((l.nome || '?').charAt(0).toUpperCase())}
                 </div>
                 <div>
-                    <h5 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(l.nome)}</h5>
+                    <h5 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(toUpper(l.nome))}</h5>
                     <p class="text-[11px] text-slate-500">${l.carros} carro(s) • R$ ${l.totalServicos.toFixed(2)} em serviços</p>
                 </div>
             </div>
