@@ -213,6 +213,7 @@ function renderClientsHtml(list) {
                     <div>
                         <h4 class="font-bold text-slate-900 dark:text-white text-sm tracking-wide flex items-center gap-2">
                             ${nomeSafe}
+                            ${c.vip ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800"><i data-lucide="crown" class="w-3 h-3"></i> VIP</span>` : ''}
                         </h4>
                         <div class="flex items-center gap-2 mt-0.5">
                             ${hasTel ? `
@@ -289,6 +290,8 @@ function openModalClient() {
     document.getElementById('client-telefone').value = '';
     document.getElementById('client-placa').value = '';
     document.getElementById('client-modelo').value = '';
+    const vipChk = document.getElementById('client-vip');
+    if (vipChk) vipChk.checked = false;
     const savedBox = document.getElementById('client-saved-actions');
     if (savedBox) {
         savedBox.innerHTML = '';
@@ -307,12 +310,25 @@ function closeModalClient() {
     if (modal) modal.classList.add('hidden');
 }
 
+// Busca cliente cadastrado por nome exato (ignora caixa). Usada pelo fluxo VIP.
+async function buscarClientePorNome(nome) {
+    const alvo = toUpper(nome || '').trim();
+    if (!alvo || typeof db === 'undefined' || !db) return null;
+    try {
+        const clientes = await db.getAll('clientes');
+        return (clientes || []).find(c => toUpper(c.nome || '').trim() === alvo) || null;
+    } catch (_) {
+        return null;
+    }
+}
+
 async function saveClient() {
     const nome = toUpper(document.getElementById('client-nome').value.trim());
     const tel = document.getElementById('client-telefone').value.trim();
     const rawPlaca = (document.getElementById('client-placa').value || '').trim().toUpperCase();
     const placa = typeof normalizarPlaca === 'function' ? normalizarPlaca(rawPlaca) : rawPlaca.replace(/[^A-Z0-9]/g, '');
     const modelo = toUpper(document.getElementById('client-modelo').value.trim());
+    const vip = document.getElementById('client-vip')?.checked === true;
 
     if (!nome) {
         showToast('Informe o nome do cliente', 'error');
@@ -331,14 +347,17 @@ async function saveClient() {
 
         if (client) {
             clienteId = client.id;
-            if (tel) {
-                client.telefone = tel;
+            const mudou = (tel && client.telefone !== tel) || client.vip !== vip;
+            if (mudou) {
+                if (tel) client.telefone = tel;
+                client.vip = vip;
                 await cStore.put(client);
             }
         } else {
             clienteId = await cStore.add({
                 nome: nome,
                 telefone: tel,
+                vip: vip,
                 criado_em: new Date().toISOString()
             });
         }

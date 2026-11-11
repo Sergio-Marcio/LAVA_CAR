@@ -79,6 +79,10 @@ let isAudioRecording = false;
 let currentInspectionMedia = [];
 let damagePoints = [];
 
+// Preço aberto (cliente VIP): estado do wizard RDP
+let precoAberto = { ativo: false, valor: null };
+let clienteVipWizard = false;
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
         '&': '&amp;',

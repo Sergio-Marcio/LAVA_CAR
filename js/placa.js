@@ -81,6 +81,7 @@ async function onPlacaInput(ev) {
     const resumo = resumoHistoricoPlaca(hist);
 
     if (hist.length) await preencherClienteDaPlaca(resumo);
+    if (typeof atualizarVipWizard === 'function') await atualizarVipWizard();
     if (box) box.innerHTML = renderHistoricoPlaca(hist, resumo);
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -176,6 +177,7 @@ async function onSelectVeiculoCadastrado(ev) {
         inpPlaca.value = placa;
         await onPlacaInput({ target: inpPlaca });
     }
+    if (typeof atualizarVipWizard === 'function') await atualizarVipWizard();
 }
 
 async function aplicarVeiculoPreSelecionadoNaOrdem(veiculoInicial) {
@@ -266,6 +268,40 @@ function renderHistoricoPlaca(hist, resumo) {
             </div>
             <ul class="text-[11px] text-slate-600 dark:text-slate-300">${linhas}</ul>
         </div>`;
+}
+
+// --- CLIENTE VIP NO WIZARD (passo 1) ---
+// Detecta se o nome digitado é um cliente cadastrado VIP e sincroniza o checkbox inp-vip.
+// O checkbox só aparece para gerente/sênior (classe senior-plus no HTML).
+let vipLookupSeq = 0;
+
+async function atualizarVipWizard() {
+    const seq = ++vipLookupSeq;
+    const nome = document.getElementById('inp-cliente')?.value || '';
+    const cliente = typeof buscarClientePorNome === 'function' ? await buscarClientePorNome(nome) : null;
+    if (seq !== vipLookupSeq) return;
+
+    const ehVipCadastrado = cliente?.vip === true;
+    clienteVipWizard = ehVipCadastrado;
+
+    const inpVip = document.getElementById('inp-vip');
+    if (inpVip && ehVipCadastrado) inpVip.checked = true;
+    if (inpVip?.dataset) inpVip.dataset.clienteId = cliente?.id ?? '';
+
+    atualizarVipBadge();
+    if (typeof atualizarBlocoPrecoAberto === 'function') atualizarBlocoPrecoAberto();
+}
+
+function onVipToggle() {
+    atualizarVipBadge();
+    if (typeof atualizarBlocoPrecoAberto === 'function') atualizarBlocoPrecoAberto();
+}
+
+function atualizarVipBadge() {
+    const badge = document.getElementById('vip-badge');
+    if (!badge) return;
+    const marcado = document.getElementById('inp-vip')?.checked === true;
+    badge.classList.toggle('hidden', !marcado);
 }
 
 // Validação ao avançar do passo 1. Retorna true se pode prosseguir.

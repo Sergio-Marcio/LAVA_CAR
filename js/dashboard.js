@@ -19,6 +19,7 @@ async function loadDashboardData() {
 
     if (typeof renderKanban === 'function') renderKanban(all);
     filterInspections(all);
+    if (typeof currentTab !== 'undefined' && currentTab === 'lavador' && typeof loadLavadorArea === 'function') loadLavadorArea();
 }
 
 async function filterInspections(all) {
@@ -133,7 +134,25 @@ async function openModalCheckout(id) {
     if (proc.servicos_adicionais) proc.servicos_adicionais.forEach(s => servs.push(s.nome));
     document.getElementById('co-servicos').textContent = servs.join(', ') || 'Nenhum';
 
-    document.getElementById('co-total').textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
+    // Preço aberto: gerente/sênior pode ajustar o valor a cobrar para cliente VIP.
+    const ehSenior = typeof isSeniorOuGerente === 'function' ? isSeniorOuGerente() : false;
+    let vip = proc.preco_aberto === true || proc.cliente_vip === true;
+    if (!vip && typeof buscarClientePorNome === 'function') {
+        try { vip = (await buscarClientePorNome(proc.cliente_nome))?.vip === true; } catch (_) {}
+    }
+    const editavel = vip && ehSenior;
+
+    const totalFixo = document.getElementById('co-total');
+    const totalEditWrap = document.getElementById('co-total-edit-wrap');
+    totalFixo.classList.toggle('hidden', editavel);
+    totalEditWrap.classList.toggle('hidden', !editavel);
+    totalFixo.textContent = `R$ ${(proc.valor_total || 0).toFixed(2)}`;
+    if (editavel) {
+        const inp = document.getElementById('co-total-input');
+        inp.value = (proc.valor_total || 0).toFixed(2);
+        const tabela = typeof proc.valor_tabela === 'number' && proc.valor_tabela !== proc.valor_total ? proc.valor_tabela : null;
+        document.getElementById('co-tabela-ref').textContent = tabela != null ? `Tabela: R$ ${tabela.toFixed(2)}` : 'Cliente VIP — preço aberto';
+    }
 
     document.getElementById('modal-checkout').classList.remove('hidden');
 }
@@ -150,6 +169,21 @@ async function confirmCheckout() {
     const proc = await tx.store.get(id);
 
     if (proc) {
+        // Se o campo de valor estava editável (cliente VIP + gerente/sênior), aplica o valor lançado.
+        const editWrap = document.getElementById('co-total-edit-wrap');
+        if (editWrap && !editWrap.classList.contains('hidden')) {
+            const v = parseFloat(document.getElementById('co-total-input')?.value);
+            if (!Number.isFinite(v) || v < 0) {
+                await tx.done;
+                return showToast('Informe um valor de cobrança válido (maior ou igual a zero).', 'error');
+            }
+            if (v !== proc.valor_total) {
+                if (typeof proc.valor_tabela !== 'number') proc.valor_tabela = proc.valor_total;
+                proc.valor_total = v;
+                proc.preco_aberto = true;
+            }
+        }
+
         proc.status = 'CONCLUIDO';
         proc.data_saida = new Date().toISOString();
         proc.forma_pagamento = formaPagamento;
@@ -215,6 +249,9 @@ async function viewDetails(id) {
 
     const placaSafe = esc(toUpper(proc.placa));
     const clienteSafe = esc(toUpper(proc.cliente_nome));
+    const vipBadge = proc.cliente_vip ? ` <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800"><i data-lucide="crown" class="w-3 h-3"></i> VIP</span>` : '';
+    const linhaTabela = proc.preco_aberto && typeof proc.valor_tabela === 'number' && proc.valor_tabela !== proc.valor_total
+        ? `<span class="block text-[10px] font-bold text-amber-600 dark:text-amber-400">PREÇO ABERTO • tabela R$ ${proc.valor_tabela.toFixed(2)}</span>` : '';
 
     const lavagemText = proc.lavagem ? `${esc(proc.lavagem.nome)} (R$ ${proc.lavagem.preco.toFixed(2)})` : 'Sem lavagem';
     const extrasText = proc.servicos_adicionais && proc.servicos_adicionais.length
@@ -224,7 +261,7 @@ async function viewDetails(id) {
     content.innerHTML = `
         <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
             <div><span class="text-slate-400">Placa:</span> <strong class="font-mono font-bold text-brand-600">${placaSafe}</strong></div>
-            <div><span class="text-slate-400">Cliente:</span> <strong>${clienteSafe}</strong></div>
+            <div><span class="text-slate-400">Cliente:</span> <strong>${clienteSafe}</strong>${vipBadge}</div>
             <div><span class="text-slate-400">Entrada:</span> ${entradaStr}</div>
             <div><span class="text-slate-400">Saída:</span> ${saidaStr}</div>
         </div>
@@ -235,7 +272,10 @@ async function viewDetails(id) {
             <p class="text-xs"><strong>Adicionais:</strong> ${extrasText}</p>
             <div class="pt-2 border-t border-brand-200 dark:border-brand-800 flex justify-between items-center">
                 <span class="text-xs font-bold">Valor Total:</span>
-                <span class="font-mono font-extrabold text-emerald-600 text-base">R$ ${(proc.valor_total || 0).toFixed(2)}</span>
+                <span class="text-right">
+                    <span class="font-mono font-extrabold text-emerald-600 text-base">R$ ${(proc.valor_total || 0).toFixed(2)}</span>
+                    ${linhaTabela}
+                </span>
             </div>
         </div>
 
@@ -287,7 +327,7 @@ SAIDA  : ${saidaStr}
 -----------------------------------
 LAVAGEM    : ${proc.lavagem ? proc.lavagem.nome : 'Sem lavagem'}
 VALOR TOTAL: R$ ${(proc.valor_total || 0).toFixed(2)}
-PAGAMENTO  : ${proc.forma_pagamento || 'PENDENTE'}
+${proc.preco_aberto && typeof proc.valor_tabela === 'number' && proc.valor_tabela !== proc.valor_total ? `VALOR TABELA: R$ ${proc.valor_tabela.toFixed(2)} (preco aberto)\n` : ''}PAGAMENTO  : ${proc.forma_pagamento || 'PENDENTE'}
 -----------------------------------
 ${proc.vistoria || proc.hash_integridade ? `${buildTermoVistoria(proc)}
 -----------------------------------

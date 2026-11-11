@@ -29,6 +29,7 @@ function setStep(step) {
     if (step === 2) {
         renderServicesSelectorsInWizard();
         if (typeof renderPainelRecomendacaoIA === 'function') renderPainelRecomendacaoIA();
+        if (typeof atualizarBlocoPrecoAberto === 'function') atualizarBlocoPrecoAberto();
     }
     if (step === 3) {
         renderChecklist();
@@ -142,28 +143,93 @@ function toggleExtraService(id) {
     renderServicesSelectorsInWizard();
 }
 
+function valorTotalTabela(allServices) {
+    const wash = (allServices || []).find(s => s.id === selectedWashId);
+    let total = wash ? wash.preco : 0;
+    selectedExtraIds.forEach(id => {
+        const ext = allServices.find(s => s.id === id);
+        if (ext) total += ext.preco;
+    });
+    return total;
+}
+
+// Acesso seguro ao estado de preço aberto (declarado em core.js; pode não existir em contextos isolados)
+function precoAbertoState() {
+    if (typeof precoAberto !== 'undefined' && precoAberto) return precoAberto;
+    const g = typeof globalThis !== 'undefined' ? globalThis : {};
+    if (!g.precoAberto) g.precoAberto = { ativo: false, valor: null };
+    return g.precoAberto;
+}
+
 async function updateFinancialCalculations(allServices) {
     if (!allServices) allServices = await db.getAll('servicos');
     const wash = allServices.find(s => s.id === selectedWashId);
-    let total = wash ? wash.preco : 0;
-
-    let extraCount = 0;
-    selectedExtraIds.forEach(id => {
-        const ext = allServices.find(s => s.id === id);
-        if (ext) {
-            total += ext.preco;
-            extraCount++;
-        }
-    });
+    const total = valorTotalTabela(allServices);
+    const extraCount = selectedExtraIds.size;
 
     document.getElementById('calc-wash-name').textContent = wash ? wash.nome : 'Sem lavagem';
     document.getElementById('calc-extras-count').textContent = `+${extraCount} adicionais`;
-    document.getElementById('calc-total-display').textContent = `R$ ${total.toFixed(2)}`;
+
+    const pa = precoAbertoState();
+    const display = document.getElementById('calc-total-display');
+    const usandoAberto = pa.ativo && typeof pa.valor === 'number' && pa.valor >= 0;
+    display.innerHTML = usandoAberto
+        ? `R$ ${pa.valor.toFixed(2)} <span class="text-[10px] font-bold text-amber-400 align-middle">PREÇO ABERTO</span>`
+        : `R$ ${total.toFixed(2)}`;
+
+    const ref = document.getElementById('preco-aberto-tabela-ref');
+    if (ref) ref.textContent = `Tabela: R$ ${total.toFixed(2)}`;
+}
+
+// --- PREÇO ABERTO (CLIENTE VIP) ---
+// O bloco só aparece quando o cliente é VIP (checkbox inp-vip) e o usuário é gerente/sênior.
+function podeUsarPrecoAberto() {
+    const vip = document.getElementById('inp-vip')?.checked === true;
+    const senior = typeof isSeniorOuGerente === 'function' ? isSeniorOuGerente() : false;
+    return vip && senior;
+}
+
+function atualizarBlocoPrecoAberto() {
+    const wrap = document.getElementById('preco-aberto-wrap');
+    if (!wrap) return;
+    const pode = podeUsarPrecoAberto();
+    wrap.classList.toggle('hidden', !pode);
+    if (!pode) {
+        const pa = precoAbertoState();
+        pa.ativo = false;
+        pa.valor = null;
+        const chk = document.getElementById('chk-preco-aberto');
+        const inp = document.getElementById('inp-preco-aberto');
+        if (chk) chk.checked = false;
+        if (inp) { inp.value = ''; inp.disabled = true; }
+    }
+    updateFinancialCalculations();
+}
+
+function togglePrecoAberto() {
+    const chk = document.getElementById('chk-preco-aberto');
+    const inp = document.getElementById('inp-preco-aberto');
+    const pa = precoAbertoState();
+    pa.ativo = !!chk?.checked;
+    if (inp) {
+        inp.disabled = !pa.ativo;
+        if (pa.ativo) inp.focus();
+    }
+    if (!pa.ativo) pa.valor = null;
+    updateFinancialCalculations();
+}
+
+function onPrecoAbertoInput() {
+    const raw = document.getElementById('inp-preco-aberto')?.value;
+    const v = parseFloat(raw);
+    precoAbertoState().valor = Number.isFinite(v) ? Math.max(0, v) : null;
+    updateFinancialCalculations();
 }
 
 // --- DAMAGE CANVAS ---
-function drawCarDiagram() {
-    const canvas = document.getElementById('damage-canvas');
+// Desenha o diagrama do veículo em um canvas qualquer, marcando os pontos informados.
+// Reutilizado pelo wizard de entrada (#damage-canvas) e pelo modal de avaria pós-checkin (#avaria-canvas).
+function drawCarDiagramOn(canvas, points) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -195,7 +261,7 @@ function drawCarDiagram() {
     ctx.fillText('LATERAL ESQUERDA', 250, 14);
     ctx.fillText('LATERAL DIREITA', 255, 254);
 
-    damagePoints.forEach((p, idx) => {
+    (points || []).forEach((p, idx) => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
         ctx.fillStyle = '#ef4444';
@@ -208,8 +274,12 @@ function drawCarDiagram() {
         ctx.font = 'bold 10px sans-serif';
         ctx.fillText(String(idx + 1), p.x - 3, p.y + 3);
     });
+}
 
-    document.getElementById('damage-count').textContent = `${damagePoints.length} avarias marcadas`;
+function drawCarDiagram() {
+    drawCarDiagramOn(document.getElementById('damage-canvas'), damagePoints);
+    const countEl = document.getElementById('damage-count');
+    if (countEl) countEl.textContent = `${damagePoints.length} avarias marcadas`;
     renderDamageList();
 }
 

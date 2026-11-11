@@ -55,6 +55,12 @@ afterEach(() => {
     delete window.loadTeam;
     delete window.createEmployee;
     delete window.supabase;
+    delete window.mostrarModalLoginOffline;
+    delete window.fecharModalLoginOffline;
+    delete window.confirmarLoginOffline;
+    delete window.fazerLoginOffline;
+    delete window.getOfflineLoginAttempts;
+    delete window.resetOfflineLoginAttempts;
   }
   if (typeof localStorage !== 'undefined' && localStorage.clear) {
     localStorage.clear();
@@ -115,6 +121,9 @@ export const LOGIN_SCREEN_HTML = `
         <input id="login-email" type="email" value="">
         <input id="login-senha" type="password" value="">
         <p id="login-error" class="hidden"></p>
+        <div id="login-offline-prompt" class="hidden">
+          <button id="offline-prompt-btn" type="button" onclick="confirmarLoginOffline()">Entrar sem internet</button>
+        </div>
         <button id="login-btn" type="submit">Entrar</button>
       </form>
     </div>
@@ -124,10 +133,19 @@ export const LOGIN_SCREEN_HTML = `
         <input id="setup-email" type="email">
         <input id="setup-senha" type="password">
         <p id="setup-error" class="hidden"></p>
+        <div id="setup-offline-prompt" class="hidden">
+          <button type="button" onclick="confirmarLoginOffline()">Entrar sem internet</button>
+        </div>
         <button id="setup-btn" type="submit">Criar Conta do Gerente</button>
       </form>
     </div>
   </div>
+</div>
+<div id="offline-login-modal" class="hidden">
+  <h3>Fazer login sem internet?</h3>
+  <p>Será necessário fazer sincronização de dados</p>
+  <button id="confirm-offline-login-btn" type="button" onclick="confirmarLoginOffline()">Sim, entrar sem internet</button>
+  <button id="cancel-offline-login-btn" type="button" onclick="fecharModalLoginOffline()">Cancelar</button>
 </div>
 <div id="toast" class="hidden">
   <div>
@@ -216,6 +234,12 @@ export function loadAuthAsScript() {
     try { window.editCommission = editCommission; } catch (e) {}
     try { window.openEditCommissionModal = openEditCommissionModal; } catch (e) {}
     try { window.renderLavadoresSelect = renderLavadoresSelect; } catch (e) {}
+    try { window.mostrarModalLoginOffline = mostrarModalLoginOffline; } catch (e) {}
+    try { window.fecharModalLoginOffline = fecharModalLoginOffline; } catch (e) {}
+    try { window.confirmarLoginOffline = confirmarLoginOffline; } catch (e) {}
+    try { window.fazerLoginOffline = confirmarLoginOffline; } catch (e) {}
+    try { window.getOfflineLoginAttempts = getOfflineLoginAttempts; } catch (e) {}
+    try { window.resetOfflineLoginAttempts = resetOfflineLoginAttempts; } catch (e) {}
     try {
       Object.defineProperty(window, 'currentUser', {
         configurable: true, enumerable: true,

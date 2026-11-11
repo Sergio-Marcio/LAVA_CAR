@@ -56,13 +56,15 @@ body {
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
-#damage-canvas {
+#damage-canvas,
+#avaria-canvas {
     touch-action: none;
     background-color: #f8fafc;
     border-radius: 0.75rem;
     cursor: crosshair;
 }
-.dark #damage-canvas {
+.dark #damage-canvas,
+.dark #avaria-canvas {
     background-color: #1e293b;
 }
 
@@ -73,6 +75,10 @@ body:not(.role-gerente) .gerente-only {
     display: none !important;
 }
 body.role-lavador .senior-plus {
+    display: none !important;
+}
+/* .lavador-only → visível para LAVADOR e LAVADOR_SENIOR (oculto para GERENTE) */
+body.role-gerente .lavador-only {
     display: none !important;
 }
 

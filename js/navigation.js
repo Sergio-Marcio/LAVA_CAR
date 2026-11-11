@@ -21,12 +21,16 @@ function updateConnectionStatus() {
 // --- NAVIGATION & TABS ---
 function switchTab(tab) {
     // Bloqueia abas restritas conforme o perfil do usuário
-    if (['settings', 'reports'].includes(tab) && typeof isGerente === 'function' && !isGerente()) {
+    if (['settings', 'reports', 'services'].includes(tab) && typeof isGerente === 'function' && !isGerente()) {
         showToast('Acesso restrito ao gerente.', 'warning');
         return;
     }
+    if (tab === 'lavador' && typeof isGerente === 'function' && isGerente()) {
+        switchTab('dashboard');
+        return;
+    }
     currentTab = tab;
-    ['dashboard', 'new', 'services', 'reports', 'clients', 'settings'].forEach(t => {
+    ['lavador', 'dashboard', 'new', 'services', 'reports', 'clients', 'settings'].forEach(t => {
         const sec = document.getElementById(`view-${t}`);
         const btn = document.getElementById(`nav-${t}`);
         if (t === tab) {
@@ -44,6 +48,7 @@ function switchTab(tab) {
         }
     });
 
+    if (tab === 'lavador' && typeof loadLavadorArea === 'function') loadLavadorArea();
     if (tab === 'dashboard') {
         loadDashboardData();
         if (typeof loadAgenda === 'function') loadAgenda();

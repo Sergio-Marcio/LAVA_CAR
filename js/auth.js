@@ -66,6 +66,106 @@ window.clearAuthErrorLogs = typeof window.clearAuthErrorLogs === 'function' ? wi
 
 let currentUser = null;
 let currentUserRole = null; // 'GERENTE' | 'LAVADOR_SENIOR' | 'LAVADOR'
+let offlineLoginAttempts = 0;
+
+function mostrarModalLoginOffline() {
+    const prompt1 = document.getElementById('login-offline-prompt');
+    const prompt2 = document.getElementById('setup-offline-prompt');
+    if (prompt1) prompt1.classList.remove('hidden');
+    if (prompt2) prompt2.classList.remove('hidden');
+
+    const modal = document.getElementById('offline-login-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
+    } else if (typeof confirm === 'function') {
+        const aceitou = confirm('Fazer login sem internet? Será necessário fazer sincronização de dados');
+        if (aceitou) {
+            confirmarLoginOffline();
+        }
+    }
+}
+
+function fecharModalLoginOffline() {
+    const modal = document.getElementById('offline-login-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function confirmarLoginOffline() {
+    fecharModalLoginOffline();
+    const emailInput = document.getElementById('login-email') || document.getElementById('setup-email');
+    const email = (emailInput && emailInput.value ? emailInput.value.trim() : '');
+
+    let cachedUser = null;
+    let cachedRole = 'GERENTE';
+    let cachedNome = '';
+
+    try {
+        const raw = localStorage.getItem('lavacar_last_auth_user');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.user) {
+                cachedUser = parsed.user;
+                cachedRole = parsed.role || 'GERENTE';
+                cachedNome = (parsed.perfil && parsed.perfil.nome) || parsed.user.user_metadata?.nome || '';
+            }
+        }
+    } catch (_) {}
+
+    const user = cachedUser || {
+        id: 'offline-' + (email ? btoa(unescape(encodeURIComponent(email))).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) : 'local'),
+        email: email || 'operador@lavacar.local',
+        user_metadata: {
+            nome: cachedNome || (email ? email.split('@')[0].toUpperCase() : 'Operador Offline')
+        },
+        isOffline: true
+    };
+
+    currentUser = user;
+    currentUserRole = cachedRole || 'GERENTE';
+
+    try {
+        localStorage.setItem('lavacar_offline_session', JSON.stringify({
+            user,
+            role: currentUserRole,
+            nome: cachedNome || user.user_metadata?.nome,
+            iniciadoEm: new Date().toISOString()
+        }));
+    } catch (_) {}
+
+    offlineLoginAttempts = 0;
+    hideLoginScreen();
+    applyRoleUI(cachedNome || user.user_metadata?.nome || user.email);
+
+    if (typeof showToast === 'function') {
+        showToast('Login sem internet realizado! Será necessário fazer sincronização de dados.', 'warning');
+    }
+
+    if (typeof atualizarIndicadorSync === 'function') {
+        try { atualizarIndicadorSync(); } catch (_) {}
+    }
+    if (typeof loadDashboardData === 'function') {
+        try { loadDashboardData(); } catch (_) {}
+    }
+    if (typeof renderKanban === 'function') {
+        try { renderKanban(); } catch (_) {}
+    }
+    if (typeof loadLavadoresDropdown === 'function') {
+        try { loadLavadoresDropdown(); } catch (_) {}
+    }
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try { lucide.createIcons(); } catch (_) {}
+    }
+}
+
+window.mostrarModalLoginOffline = mostrarModalLoginOffline;
+window.fecharModalLoginOffline = fecharModalLoginOffline;
+window.confirmarLoginOffline = confirmarLoginOffline;
+window.fazerLoginOffline = confirmarLoginOffline;
+window.getOfflineLoginAttempts = function () { return offlineLoginAttempts; };
+window.resetOfflineLoginAttempts = function () { offlineLoginAttempts = 0; };
 
 const ROLE_LABELS = {
     'GERENTE': 'Gerente',
@@ -74,6 +174,21 @@ const ROLE_LABELS = {
 };
 
 async function initAuth() {
+    try {
+        const offlineRaw = localStorage.getItem('lavacar_offline_session');
+        if (offlineRaw && (!_U.isOnline() || !sbClient)) {
+            const sess = JSON.parse(offlineRaw);
+            if (sess && sess.user) {
+                currentUser = sess.user;
+                currentUserRole = sess.role || 'GERENTE';
+                hideLoginScreen();
+                applyRoleUI(sess.nome || sess.user.user_metadata?.nome || sess.user.email);
+                if (typeof atualizarIndicadorSync === 'function') atualizarIndicadorSync();
+                return;
+            }
+        }
+    } catch (_) {}
+
     if (!sbClient) {
         currentUser = null;
         currentUserRole = null;
@@ -221,6 +336,10 @@ async function handleSetupGerente(evt) {
             attempt: 0,
             totalAttempts: 1
         });
+        offlineLoginAttempts++;
+        if (offlineLoginAttempts >= 3) {
+            mostrarModalLoginOffline();
+        }
         return;
     }
 
@@ -291,18 +410,33 @@ async function handleSetupGerente(evt) {
 }
 
 async function handleLogin(evt) {
-    evt.preventDefault();
-    if (!sbClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
-    const email = document.getElementById('login-email').value.trim();
-    const senha = document.getElementById('login-senha').value;
+    if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+    const email = (document.getElementById('login-email')?.value || '').trim();
+    const senha = document.getElementById('login-senha')?.value || '';
     const btn = document.getElementById('login-btn');
     const errEl = document.getElementById('login-error');
 
-    errEl.classList.add('hidden');
+    if (errEl) errEl.classList.add('hidden');
+
+    if (!sbClient) {
+        offlineLoginAttempts++;
+        if (errEl) {
+            errEl.textContent = 'Sem conexão com a internet. Verifique sua conexão e tente novamente.';
+            errEl.classList.remove('hidden');
+        } else {
+            showToast('Sem conexão com a internet. Verifique sua conexão e tente novamente.', 'error');
+        }
+        if (offlineLoginAttempts >= 3) {
+            mostrarModalLoginOffline();
+        }
+        return;
+    }
 
     if (!_U.isOnline()) {
-        errEl.textContent = 'Sem conexão com a internet. Verifique sua conexão e tente novamente.';
-        errEl.classList.remove('hidden');
+        if (errEl) {
+            errEl.textContent = 'Sem conexão com a internet. Verifique sua conexão e tente novamente.';
+            errEl.classList.remove('hidden');
+        }
         _U.logAuthError({
             operation: 'auth_handleLogin_offline_block',
             kind: 'offline_or_network',
@@ -311,11 +445,17 @@ async function handleLogin(evt) {
             totalAttempts: 1,
             extra: { email: email || '' }
         });
+        offlineLoginAttempts++;
+        if (offlineLoginAttempts >= 3) {
+            mostrarModalLoginOffline();
+        }
         return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Entrando...';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Entrando...';
+    }
 
     let errMsg = null;
     let classified = null;
@@ -342,7 +482,14 @@ async function handleLogin(evt) {
                 totalAttempts: attemptResult.totalAttempts,
                 extra: { email: email || '' }
             });
+            if (classified.kind === 'offline_or_network' || classified.kind === 'timeout' || classified.kind === 'server_error') {
+                offlineLoginAttempts++;
+                if (offlineLoginAttempts >= 3) {
+                    mostrarModalLoginOffline();
+                }
+            }
         } else {
+            offlineLoginAttempts = 0;
             const { data } = attemptResult.result;
             await onLoggedIn(data.user);
             return;
@@ -359,12 +506,20 @@ async function handleLogin(evt) {
             totalAttempts: 1,
             extra: { email: email || '' }
         });
+        if (classified.kind === 'offline_or_network' || classified.kind === 'timeout' || classified.kind === 'server_error') {
+            offlineLoginAttempts++;
+            if (offlineLoginAttempts >= 3) {
+                mostrarModalLoginOffline();
+            }
+        }
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'Entrar';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Entrar';
+        }
     }
 
-    if (errMsg) {
+    if (errMsg && errEl) {
         errEl.textContent = errMsg;
         errEl.classList.remove('hidden');
     }
@@ -415,8 +570,9 @@ async function onLoggedIn(user) {
 
     if (perfilError || !perfil) {
         console.error('Erro ao buscar perfil:', perfilError);
-        currentUserRole = 'LAVADOR'; // papel mais restrito como fallback
-    } else if (perfil.ativo === false) {
+        await bloquearAcessoPerfil('Não foi possível validar seu perfil. Tente novamente ou contate o gerente.');
+        return;
+    } else if (perfil.ativo !== true || !Object.hasOwn(ROLE_LABELS, perfil.role)) {
         _U.logAuthError({
             operation: 'auth_onLoggedIn_usuarioInativo',
             kind: 'user_disabled',
@@ -425,19 +581,7 @@ async function onLoggedIn(user) {
             totalAttempts: 1,
             extra: { userId: user ? user.id : undefined, role: perfil ? perfil.role : undefined }
         });
-        try {
-            await sbClient.auth.signOut();
-        } catch (e) {
-            _U.logAuthError({
-                operation: 'auth_onLoggedIn_signOut_inactive',
-                kind: 'unknown',
-                message: (e && e.message) ? e.message : String(e),
-                stack: (e && e.stack) ? e.stack : undefined,
-                attempt: 0,
-                totalAttempts: 1
-            });
-        }
-        showToast('Usuário desativado. Contate o gerente.', 'error');
+        await bloquearAcessoPerfil('Usuário desativado ou sem perfil autorizado. Contate o gerente.');
         return;
     } else {
         currentUserRole = perfil.role;
@@ -447,31 +591,59 @@ async function onLoggedIn(user) {
     applyRoleUI(perfil ? perfil.nome : user.email);
     showToast(`Bem-vindo, ${perfil?.nome || user.email} (${ROLE_LABELS[currentUserRole]})`, 'success');
     try { loadLavadoresDropdown(); } catch (_) {}
+    try {
+        localStorage.setItem('lavacar_last_auth_user', JSON.stringify({
+            user: { id: user.id, email: user.email, user_metadata: user.user_metadata },
+            perfil: perfil,
+            role: currentUserRole
+        }));
+        localStorage.removeItem('lavacar_offline_session');
+    } catch (_) {}
+    offlineLoginAttempts = 0;
+}
+
+async function bloquearAcessoPerfil(mensagem) {
+    currentUser = null;
+    currentUserRole = null;
+    try {
+        localStorage.removeItem('lavacar_last_auth_user');
+        localStorage.removeItem('lavacar_offline_session');
+    } catch (_) {}
+    document.body.classList.remove('role-gerente', 'role-senior', 'role-lavador');
+    document.getElementById('user-badge')?.classList.add('hidden');
+    try { await sbClient.auth.signOut(); } catch (_) {}
+    showLoginScreen();
+    const erro = document.getElementById('login-error');
+    if (erro) {
+        erro.textContent = mensagem;
+        erro.classList.remove('hidden');
+    }
 }
 
 async function handleLogout() {
-    if (!sbClient) {
-        currentUser = null;
-        currentUserRole = null;
-        try { return decideLoginOrSetup(); } catch (_) {}
-    }
     if (confirm('Deseja sair do sistema?')) {
         try {
-            await sbClient.auth.signOut();
-        } catch (e) {
-            const classified = _U.classifyAuthError(e);
-            _U.logAuthError({
-                operation: 'auth_handleLogout_signOut',
-                kind: classified.kind,
-                message: classified.rawMessage || (e && e.message) || String(e),
-                stack: (e && e.stack) ? e.stack : undefined,
-                attempt: 0,
-                totalAttempts: 1
-            });
-            currentUser = null;
-            currentUserRole = null;
-            try { decideLoginOrSetup(); } catch (_) {}
+            localStorage.removeItem('lavacar_offline_session');
+        } catch (_) {}
+        currentUser = null;
+        currentUserRole = null;
+        offlineLoginAttempts = 0;
+        if (sbClient) {
+            try {
+                await sbClient.auth.signOut();
+            } catch (e) {
+                const classified = _U.classifyAuthError(e);
+                _U.logAuthError({
+                    operation: 'auth_handleLogout_signOut',
+                    kind: classified.kind,
+                    message: classified.rawMessage || (e && e.message) || String(e),
+                    stack: (e && e.stack) ? e.stack : undefined,
+                    attempt: 0,
+                    totalAttempts: 1
+                });
+            }
         }
+        try { decideLoginOrSetup(); } catch (_) { showLoginScreen(); }
     }
 }
 
@@ -499,9 +671,15 @@ function applyRoleUI(displayName) {
         badge.classList.remove('hidden');
     }
 
-    // Não-gerente: se estiver numa aba proibida, volta ao dashboard
-    if (currentUserRole !== 'GERENTE' && ['settings', 'reports'].includes(currentTab)) {
-        switchTab('dashboard');
+    // Não-gerente: se estiver numa aba proibida, volta à área do lavador
+    if (currentUserRole !== 'GERENTE' && ['settings', 'reports', 'services'].includes(currentTab)) {
+        switchTab('lavador');
+        return;
+    }
+
+    // Lavador e sênior aterrissam na área operacional em cards (home simplificada)
+    if (currentUserRole !== 'GERENTE' && currentTab === 'dashboard') {
+        switchTab('lavador');
     }
 }
 
@@ -578,9 +756,30 @@ function openEditCommissionModal(id) {
     editCommission(m.id, m.nome || 'Membro', m.taxa_carro || 0, m.comissao_pct || 0);
 }
 
+// Edge Function 'criar-funcionario': cria usuário já confirmado via service role,
+// restrita a gerente — permite desligar o cadastro público no Supabase.
+// Falhas nunca recorrem a signUp público nem gravam perfis pelo navegador.
+async function criarFuncionarioViaEdge(payload) {
+    const indisponivel = 'Cadastro indisponível. Verifique a implantação da função criar-funcionario e tente novamente.';
+    if (!sbClient?.functions?.invoke) return { ok: false, error: indisponivel };
+    try {
+        const { data, error } = await sbClient.functions.invoke('criar-funcionario', { body: payload });
+        if (error) {
+            let resposta;
+            try { resposta = await error.context?.json(); } catch (_) {}
+            return { ok: false, error: resposta?.error || indisponivel };
+        }
+        if (data && data.ok === true) return { ok: true };
+        return { ok: false, error: (data && data.error) || 'Erro na função de cadastro.' };
+    } catch (e) {
+        return { ok: false, error: indisponivel };
+    }
+}
+
 async function createEmployee(evt) {
-    evt.preventDefault();
-    if (!sbClient || !sbSignupClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
+    evt?.preventDefault();
+    if (!isGerente()) return showToast('Apenas o gerente pode cadastrar funcionários.', 'warning');
+    if (!sbClient) return showToast('Supabase indisponível. Verifique sua conexão.', 'error');
     const nome = document.getElementById('emp-nome').value.trim();
     const email = document.getElementById('emp-email').value.trim();
     const senha = document.getElementById('emp-senha').value;
@@ -589,73 +788,30 @@ async function createEmployee(evt) {
     const comissaoPct = parseFloat(document.getElementById('emp-comissao-pct').value) || 0;
     const btn = document.getElementById('emp-btn');
 
+    if (btn.disabled) return;
+    if (!nome || !email) return showToast('Informe nome e e-mail.', 'error');
     if (senha.length < 6) return showToast('A senha deve ter no mínimo 6 caracteres.', 'error');
 
     btn.disabled = true;
 
-    // Usa o cliente sem persistência para não derrubar a sessão do gerente
-    const { data, error } = await sbSignupClient.auth.signUp({
-        email,
-        password: senha,
-        options: {
-            data: {
-                nome,
-                role,
-                taxa_carro: taxaCarro,
-                comissao_pct: comissaoPct
-            }
-        }
-    });
-
-    if (error) {
-        btn.disabled = false;
-        const classified = _U.classifyAuthError(error);
-        _U.logAuthError({
-            operation: 'auth_createEmployee_signUp',
-            kind: classified.kind,
-            message: classified.rawMessage || error.message,
-            stack: error.stack,
-            attempt: 0,
-            totalAttempts: 1,
-            extra: { email, role }
+    // Cadastro exclusivamente administrativo, com confirmação de e-mail pelo servidor.
+    try {
+        const edge = await criarFuncionarioViaEdge({
+            nome, email, senha, role,
+            taxa_carro: taxaCarro,
+            comissao_pct: comissaoPct
         });
-        return showToast('Erro ao cadastrar: ' + (classified.userMessage || error.message), 'error');
-    }
-
-    // Garante persistência dos dados no perfil
-    if (data.user) {
-        const { error: perfilErr } = await sbClient
-            .from('perfis')
-            .upsert({
-                id: data.user.id,
-                nome,
-                email,
-                role,
-                taxa_carro: taxaCarro,
-                comissao_pct: comissaoPct,
-                ativo: true
-            }, { onConflict: 'id' });
-
-        if (perfilErr) {
-            console.warn('Falha ao salvar perfil do funcionário:', perfilErr);
-            const classified = _U.classifyAuthError(perfilErr);
-            _U.logAuthError({
-                operation: 'auth_createEmployee_perfil_upsert',
-                kind: classified.kind,
-                message: classified.rawMessage || perfilErr.message,
-                stack: perfilErr.stack,
-                attempt: 0,
-                totalAttempts: 1,
-                extra: { userId: data.user.id }
-            });
+        if (edge.ok) {
+            document.getElementById('form-employee').reset();
+            showToast(`Funcionário ${nome} cadastrado! Já pode entrar com o e-mail e a senha inicial.`, 'success');
+            loadTeam();
+            loadLavadoresDropdown();
+        } else {
+            showToast('Erro ao cadastrar: ' + edge.error, 'error');
         }
+    } finally {
+        btn.disabled = false;
     }
-
-    btn.disabled = false;
-    document.getElementById('form-employee').reset();
-    showToast(`Funcionário ${nome} cadastrado!`, 'success');
-    loadTeam();
-    loadLavadoresDropdown();
 }
 
 async function changeTeamRole(id, role) {

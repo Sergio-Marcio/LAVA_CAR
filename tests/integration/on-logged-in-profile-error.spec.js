@@ -7,7 +7,7 @@ describe('Integração: onLoggedIn com erro em busca de perfil (AC-6)', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
   });
 
-  it('deve capturar erro em from(perfis).select... (Failed to fetch) e manter estado fallback com log', async () => {
+  it('deve registrar falha na consulta e negar acesso sem atribuir papel fallback', async () => {
     const signInSpy = vi.fn(async () => ({
       data: { user: { id: 'user-1', email: 'a@b.com' }, session: { user: { id: 'user-1' } } },
       error: null
@@ -44,7 +44,10 @@ describe('Integração: onLoggedIn com erro em busca de perfil (AC-6)', () => {
     await hp;
 
     expect(perfilSpy).toHaveBeenCalled();
-    expect(window.currentUser).not.toBeNull();
+    expect(window.currentUser).toBeNull();
+    expect(window.currentUserRole).toBeNull();
+    expect(mockSb.auth.signOut).toHaveBeenCalled();
+    expect(document.getElementById('login-screen').classList.contains('hidden')).toBe(false);
     const logs = window.getAuthErrorLogs();
     const perfilLogs = logs.filter(l => l.operation === 'auth_onLoggedIn_fetchPerfil' || l.operation === 'auth_onLoggedIn_fetchPerfil_catch');
     expect(perfilLogs.length).toBeGreaterThanOrEqual(1);

@@ -130,7 +130,7 @@ async function processInspectionImage(source, sourceWidth, sourceHeight, options
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     const capturedAt = new Date().toISOString();
-    const placa = document.getElementById('inp-placa')?.value || '';
+    const placa = options.placa || document.getElementById('inp-placa')?.value || '';
     const text = buildWatermarkText(placa, capturedAt, currentInspectionGeo);
     const fontSize = Math.max(12, Math.round(width / 45));
     ctx.font = `bold ${fontSize}px monospace`;

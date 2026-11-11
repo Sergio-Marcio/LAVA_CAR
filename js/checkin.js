@@ -26,7 +26,12 @@ async function updateReviewSummary() {
 
     document.getElementById('rev-lavagem').textContent = wash ? `${wash.nome} (R$ ${wash.preco.toFixed(2)})` : 'Nenhum';
     document.getElementById('rev-extras').textContent = extraNames.length ? extraNames.join(', ') : 'Nenhum';
-    document.getElementById('rev-total').textContent = `R$ ${total.toFixed(2)}`;
+
+    const pa = typeof precoAbertoState === 'function' ? precoAbertoState() : { ativo: false, valor: null };
+    const usandoAberto = pa.ativo && typeof pa.valor === 'number' && pa.valor >= 0;
+    document.getElementById('rev-total').innerHTML = usandoAberto
+        ? `R$ ${pa.valor.toFixed(2)} <span class="text-[10px] font-bold text-amber-500">PREÇO ABERTO • tabela R$ ${total.toFixed(2)}</span>`
+        : `R$ ${total.toFixed(2)}`;
 
     const preview = await computeInspectionHash({
         placa,
@@ -82,7 +87,15 @@ async function saveInspectionRDP() {
         }
     });
 
-    const valorTotal = (wash ? wash.preco : 0) + valorAdicionais;
+    const valorTabela = (wash ? wash.preco : 0) + valorAdicionais;
+
+    // Preço aberto (cliente VIP): gerente/sênior pode lançar valor diferente da tabela.
+    const vipMarcado = document.getElementById('inp-vip')?.checked === true;
+    const ehSenior = typeof isSeniorOuGerente === 'function' ? isSeniorOuGerente() : false;
+    const pa = typeof precoAbertoState === 'function' ? precoAbertoState() : { ativo: false, valor: null };
+    const usandoPrecoAberto = ehSenior && vipMarcado && pa.ativo
+        && typeof pa.valor === 'number' && pa.valor >= 0;
+    const valorTotal = usandoPrecoAberto ? pa.valor : valorTabela;
 
     // Apura comissão: taxa fixa por carro + % sobre o valor do serviço
     const comissaoValor = taxaCarro + (valorTotal * comissaoPct / 100);
@@ -103,16 +116,25 @@ async function saveInspectionRDP() {
 
     // Cliente
     let clienteId;
+    let clienteVip;
     const existingClients = await tx.objectStore('clientes').getAll();
     const foundClient = existingClients.find(c => c.nome.toLowerCase() === cliente.toLowerCase());
     if (foundClient) {
         clienteId = foundClient.id;
+        // Gerente/sênior controla a flag VIP pelo checkbox do wizard; lavador mantém o cadastro.
+        if (ehSenior && !!foundClient.vip !== vipMarcado) {
+            foundClient.vip = vipMarcado;
+            await tx.objectStore('clientes').put(foundClient);
+        }
+        clienteVip = foundClient.vip === true;
     } else {
         clienteId = await tx.objectStore('clientes').add({
             nome: cliente,
             telefone: telefone,
+            vip: ehSenior ? vipMarcado : false,
             criado_em: new Date().toISOString()
         });
+        clienteVip = ehSenior ? vipMarcado : false;
     }
 
     // Veículo
@@ -167,6 +189,9 @@ async function saveInspectionRDP() {
         valor_lavagem: wash ? wash.preco : 0,
         valor_adicionais: valorAdicionais,
         valor_total: valorTotal,
+        valor_tabela: valorTabela,
+        preco_aberto: usandoPrecoAberto,
+        cliente_vip: clienteVip,
         forma_pagamento: null,
         lavador_id: lavadorId,
         lavador_nome: lavadorNome,
@@ -250,6 +275,16 @@ function resetRdpForm() {
     currentInspectionMedia = [];
     damagePoints = [];
     currentInspectionGeo = null;
+    precoAberto = { ativo: false, valor: null };
+    clienteVipWizard = false;
+    const vipChk = document.getElementById('inp-vip');
+    if (vipChk) { vipChk.checked = false; if (vipChk.dataset) delete vipChk.dataset.clienteId; }
+    const vipBadge = document.getElementById('vip-badge');
+    if (vipBadge) vipBadge.classList.add('hidden');
+    const paChk = document.getElementById('chk-preco-aberto');
+    const paInp = document.getElementById('inp-preco-aberto');
+    if (paChk) paChk.checked = false;
+    if (paInp) { paInp.value = ''; paInp.disabled = true; }
     clearSignature();
     selectedWashId = null;
     selectedExtraIds.clear();
