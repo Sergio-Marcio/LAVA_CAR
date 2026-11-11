@@ -91,6 +91,18 @@ describe('Cadastro administrativo: servidor', () => {
         expect(await response.json()).toEqual({ ok: true, user_id: 'novo-id' });
     });
 
+    it.each([
+        { code: 'email_exists', message: 'x' },
+        { message: 'A user with this email address has already been registered' }
+    ])('informa e-mail já cadastrado com 409: %j', async (erro) => {
+        const { handler, admin } = mockAdmin();
+        admin.auth.admin.createUser.mockResolvedValue({ data: null, error: erro });
+        const response = await handler(request());
+        expect(response.status).toBe(409);
+        expect((await response.json()).error).toContain('Este e-mail já está cadastrado');
+        expect(admin.auth.admin.deleteUser).not.toHaveBeenCalled();
+    });
+
     it('não remove conta existente em erro de criação', async () => {
         const { handler, admin } = mockAdmin();
         admin.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'duplicate' } });

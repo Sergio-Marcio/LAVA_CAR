@@ -55,6 +55,9 @@ export function createEmployeeHandler(admin) {
                 // app_metadata só pode ser definida pelo servidor administrativo.
                 app_metadata: { staff_provisioned: true, created_by: data.user.id }
             });
+            if (createError?.code === 'email_exists' || /already (been )?registered|already exists/i.test(createError?.message || '')) {
+                return json({ ok: false, error: 'Este e-mail já está cadastrado. Use outro e-mail ou reative o funcionário na lista da Equipe.' }, 409);
+            }
             if (createError || !created?.user) {
                 return json({ ok: false, error: 'Não foi possível criar a conta. Confira se o e-mail já está cadastrado e a política de senha.' }, 400);
             }
